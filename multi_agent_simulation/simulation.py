@@ -7,13 +7,14 @@ import numpy as np
 from pyhgf.math import binary_surprise, dirichlet_kullback_leibler
 
 # Set global constraints for all plots
-plt.rcParams['figure.figsize'] = [8, 10]  # Adjust height to accommodate subplots
+plt.rcParams['figure.figsize'] = [8, 10]  # Adjust height
 plt.rcParams['figure.dpi'] = 100  # Resolution in DPI
-plt.style.use('seaborn-v0_8-pastel')  # Use seaborn style for better aesthetics
+plt.style.use('seaborn-v0_8-pastel')  # Use seaborn style
 
+#TODO: Add one different preference for each agent
 class MultiAgentSimulation:
     """
-    A class to simulate multiple agents using the Hierarchical Gaussian Filter (HGF) model.
+    A class to simulate multiple agents using PyHGF Library.
 
     Attributes:
         n_steps (int): Number of time steps in the simulation.
@@ -39,7 +40,7 @@ class MultiAgentSimulation:
 
     def create_agent(self):
         """
-        Create a new agent with the specified network structure.
+        Create a new agent.
 
         Returns:
             Network: A configured Network object representing the agent.
@@ -58,7 +59,7 @@ class MultiAgentSimulation:
 
     def generate_observations(self, n_agents=2):
         """
-        Generate random observations for each agent.
+        Generate random observations.
 
         Args:
             n_agents (int): Number of agents to generate observations for. Defaults to 2.
@@ -71,7 +72,7 @@ class MultiAgentSimulation:
 
     def run_simulation(self, n_agents=2):
         """
-        Run the simulation with the specified number of agents.
+        Run the simulation.
 
         Args:
             n_agents (int): Number of agents to simulate. Defaults to 2.
@@ -146,13 +147,13 @@ class MultiAgentSimulation:
         Returns:
             numpy.ndarray: A 2D array of surprises with shape (n_agents, n_nodes).
         """
-        surprises = np.zeros((len(self.agents), self.n_nodes))
-        for i, agent in enumerate(self.agents):
-            for j in range(self.n_nodes):
-                expected_mean = agent.node_trajectories[j]["expected_mean"][time_step]
-                actual_value = self.observations[i][time_step, j]
-                surprises[i, j] = self.calculate_surprise(expected_mean, actual_value)
-        return surprises
+        surprises = np.zeros((len(self.agents), self.n_nodes)) # Initialize surprises array
+        for i, agent in enumerate(self.agents): # Iterate through each agent
+            for j in range(self.n_nodes): # Iterate through each node
+                expected_mean = agent.node_trajectories[j]["expected_mean"][time_step] # Get expected mean for the node at the given time step
+                actual_value = self.observations[i][time_step, j] # Get the actual observed value for the node at the given time step
+                surprises[i, j] = self.calculate_surprise(expected_mean, actual_value) # Calculate surprise
+        return surprises 
 
     def get_agent_kl_divergences(self, time_step):
         """
@@ -164,22 +165,15 @@ class MultiAgentSimulation:
         Returns:
             numpy.ndarray: A 3D array of KL divergences with shape (n_agents, n_agents, n_nodes).
         """
-        n_agents = len(self.agents)
-        kl_divergences = np.zeros((n_agents, n_agents, self.n_nodes))
-        for i in range(n_agents):
-            for j in range(n_agents):
-                for k in range(self.n_nodes):
-                    # Assuming the node trajectories contain the necessary distributions
-                    # Placeholder: actual implementation depends on data structure
-                    # For now, we'll use the expected_mean as a placeholder for the distribution
-                    # Note: This is a placeholder; actual implementation depends on the data structure
-                    # and the correct parameters for dirichlet_kullback_leibler
-                    dist1 = self.agents[i].node_trajectories[k]["expected_mean"][time_step]
-                    dist2 = self.agents[j].node_trajectories[k]["expected_mean"][time_step]
-                    # Note: dirichlet_kullback_leibler expects specific parameters, so this may not work correctly
-                    # without proper distribution parameters.
+        n_agents = len(self.agents) # Get the number of agents
+        kl_divergences = np.zeros((n_agents, n_agents, self.n_nodes)) # Initialize KL divergences array
+        for i in range(n_agents): # Iterate through each agent
+            for j in range(n_agents): # Iterate through each agent again for pairwise comparison
+                for k in range(self.n_nodes): # Iterate through each node
+                    dist1 = self.agents[i].node_trajectories[k]["expected_mean"][time_step] # Get expected mean for the node at the given time step for agent i
+                    dist2 = self.agents[j].node_trajectories[k]["expected_mean"][time_step] # Get expected mean for the node at the given time step for agent j
                     try:
-                        kl_divergences[i, j, k] = self.calculate_kl_divergence(dist1, dist2)
+                        kl_divergences[i, j, k] = self.calculate_kl_divergence(dist1, dist2) # Calculate KL divergence between the two distributions
                     except:
                         kl_divergences[i, j, k] = np.nan  # Placeholder for invalid calculations
         return kl_divergences
