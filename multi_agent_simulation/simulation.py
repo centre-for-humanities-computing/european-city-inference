@@ -1,11 +1,10 @@
-import pyhgf  # Importing pyhgf library for Hierarchical Gaussian Filter
-from pyhgf.model import Network  # Importing Network class from pyhgf.model
-import numpy as np  # Importing NumPy library for numerical operations
-import matplotlib.pyplot as plt  # Importing matplotlib for plotting
-import matplotlib.cm as cm  # Importing colormaps from matplotlib
-from pyhgf.math import binary_surprise, dirichlet_kullback_leibler  # Importing specific functions from pyhgf.math
-from scipy.stats import norm  # Importing normal distribution functions from scipy.stats
-from scipy.special import expit  # Importing expit function (sigmoid function) from scipy.special
+from pyhgf.model import Network
+import numpy as np  
+import matplotlib.pyplot as plt  
+import matplotlib.cm as cm  
+from pyhgf.math import binary_surprise
+from scipy.stats import norm  
+from scipy.special import expit
 
 # Set global constraints for all plots
 plt.rcParams['figure.figsize'] = [8, 10]  # Adjust height
@@ -132,7 +131,7 @@ class Voter(Agent):
         best_candidate = None
         min_total_dissatisfaction = float('inf')
 
-        # Afficher les préférences actuelles du voter
+        # Display current dissatisfaction for each node
         print(f"\nVoter preferences: {self.network.attributes[-1]['preference']}")
 
         for i, candidate in enumerate(candidates):
@@ -147,7 +146,7 @@ class Voter(Agent):
             candidate_std_pref = 1 / np.sqrt(candidate_precision_pref)
             candidate_var_pref = candidate_std_pref ** 2
 
-            # Afficher les préférences du candidat (pour debug)
+            # Display candidate preferences (for debugging)
             print(f"\nCandidate {i} preferences (mean, precision):")
             for node in range(n_nodes):
                 if node < len(candidate_mean_pref):
@@ -236,21 +235,15 @@ class AgentFactory:
             raise ValueError("Invalid agent type")
 
 class MultiAgentSimulation:
-    def __init__(self, n_steps=100, n_nodes=3, n_agents_per_population=5):
-        """
-        Initialize a multi-agent simulation.
-
-        Args:
-            n_steps: Number of time steps in the simulation.
-            n_nodes: Number of nodes in the network.
-            n_agents_per_population: Number of agents per population.
-        """
+    def __init__(self, n_steps=100, n_nodes=3, n_agents_per_population=5, n_candidates=None):
         self.n_steps = n_steps
         self.n_nodes = n_nodes
         self.n_agents_per_population = n_agents_per_population
+        self.n_candidates = n_candidates if n_candidates is not None else n_agents_per_population
         self.agents = []  # List to store agents
         self.agent_networks = []  # List to store the networks of agents
         self.observations = []
+
 
     def create_agent(self, agent_type, tonic_volatility, preferences=None, beta_params=None, preference_normal=None):
         """
@@ -458,7 +451,7 @@ class MultiAgentSimulation:
 
     def run_simulation(self, scenario=1, shock_pattern=None, shock_time=None, recovery_time=None, trend_shape='linear'):
         n_voters_per_population = self.n_agents_per_population
-        n_candidates = self.n_agents_per_population  # On peut ajuster ce nombre si nécessaire
+        n_candidates = self.n_candidates
         total_agents = 2 * n_voters_per_population + n_candidates
 
         # Définir les volatilités pour chaque population
@@ -466,11 +459,11 @@ class MultiAgentSimulation:
         volatility_pop2 = -1
         volatility_candidates = -2  # Une volatilité différente pour les candidats
 
-        # Définir les préférences pour chaque population d'électeurs
+        # Définir les préférences pour chaque population
         population_1_preferences = np.array([0.1, 0.4])  # Exemple de préférences pour la Population 1
         population_2_preferences = np.array([0.8, 0.1])  # Exemple de préférences pour la Population 2
 
-        # Définir les paramètres bêta pour chaque population
+        # Définir les paramètres beta pour chaque population
         beta_params_pop1 = (5, 1)
         beta_params_pop2 = (2, 1)
         beta_params_candidates = (3, 1)
@@ -483,7 +476,7 @@ class MultiAgentSimulation:
 
         # Générer des observations pour tous les agents
         self.generate_observations(total_agents, node_beta_params, scenario, shock_pattern,
-                                shock_time, recovery_time, trend_shape)
+                                   shock_time, recovery_time, trend_shape)
 
         # Créer les agents
         # Population 1 : électeurs
@@ -493,22 +486,22 @@ class MultiAgentSimulation:
         population_2 = [self.create_agent("voter", volatility_pop2, population_2_preferences, beta_params_pop2)
                         for _ in range(n_voters_per_population)]
 
-        # Créer les candidats avec des préférences générées à partir d'une distribution normale
+        # Create candidates
         candidates = []
         for i in range(n_candidates):
-            # Définir une distribution normale pour chaque nœud pour les préférences du candidat
+            # Définir les préférences pour les candidats
             mean = np.random.uniform(0, 1, size=self.n_nodes)  # Moyenne aléatoire entre 0 et 1 pour chaque nœud
             precision = np.random.gamma(shape=2.0, scale=1.0, size=self.n_nodes)  # Précision aléatoire pour chaque nœud
             preference_normal = (mean, precision)
 
             # Créer le candidat avec ces préférences
             candidate = self.create_agent("candidate", volatility_candidates,
-                                        preferences=None,  # Les préférences seront générées à partir de preference_normal
-                                        beta_params=beta_params_candidates,
-                                        preference_normal=preference_normal)
+                                          preferences=None,  # Les préférences seront générées à partir de preference_normal
+                                          beta_params=beta_params_candidates,
+                                          preference_normal=preference_normal)
             candidates.append(candidate)
 
-            # Afficher les préférences générées pour chaque candidat (pour debug)
+            # Afficher les préférences générées pour chaque candidat (pour le débogage)
             print(f"Candidate {i} preferences (mean, precision):")
             for node in range(self.n_nodes):
                 print(f"  Node {node}: mean = {mean[node]:.2f}, precision = {precision[node]:.2f}")
@@ -518,7 +511,6 @@ class MultiAgentSimulation:
         # Assigner les observations à chaque agent
         for i, agent in enumerate(self.agents):
             self.agent_networks[i].input_data(input_data=self.observations[i], time_steps=np.ones(self.n_steps))
-
 
     def simulate_voting(self):
         n = self.n_agents_per_population
@@ -558,23 +550,24 @@ class MultiAgentSimulation:
             print("No candidates available for voting.")
 
     def plot_trajectories(self):
-        """
-        Plot the expected mean trajectories for all agents across all nodes.
-        """
-        # Define line styles for agents within each population
+        # Déterminer le nombre de votants
+        n_voters_per_population = self.n_agents_per_population
+        total_voters = 2 * n_voters_per_population
+
+        # Définir les styles de ligne pour les agents au sein de chaque population
         line_styles = ['-', '--', '-.', ':', (0, (3, 1, 1, 1)), (0, (5, 5)),
                        (0, (3, 5, 1, 5)), (0, (1, 1)), (0, (5, 1))]
 
-        # Use a colormap with more distinct colors
-        colormap = cm.get_cmap('tab20', 20)  # Supports up to 20 distinct populations
+        # Utiliser une colormap avec plus de couleurs distinctes
+        colormap = cm.get_cmap('tab20', 20)  # Supports jusqu'à 20 populations distinctes
 
-        # Adjust figure size dynamically based on number of nodes
+        # Ajuster la taille de la figure dynamiquement en fonction du nombre de nœuds
         fig_height = max(10, 2 * self.n_nodes)
         plt.rcParams['figure.figsize'] = [12, fig_height]
 
         fig, axs = plt.subplots(self.n_nodes, 1, figsize=(12, fig_height))
 
-        # Ensure axs is always iterable (for the case of 1 node)
+        # S'assurer que axs est toujours itérable (pour le cas d'un seul nœud)
         if self.n_nodes == 1:
             axs = [axs]
 
@@ -584,10 +577,11 @@ class MultiAgentSimulation:
             labels = []
             added_agents = set()
 
-            for j, agent in enumerate(self.agents):
-                population = (j // self.n_agents_per_population) + 1
+            # Parcourir uniquement les votants
+            for j, agent in enumerate(self.agents[:total_voters]):
+                population = 1 if j < n_voters_per_population else 2
                 color = colormap(population - 1)
-                agent_in_pop = j % self.n_agents_per_population
+                agent_in_pop = j % n_voters_per_population
                 linestyle = line_styles[agent_in_pop % len(line_styles)]
 
                 line, = ax.plot(self.agent_networks[j].node_trajectories[i]["expected_mean"],
@@ -596,34 +590,34 @@ class MultiAgentSimulation:
                                 linewidth=1.5,
                                 alpha=0.7)
 
-                # Add to legend (limited to first 12 unique agent types)
+                # Ajouter à la légende (limité aux 12 premiers types d'agents uniques)
                 if len(added_agents) < 12 and (population, agent_in_pop) not in added_agents:
                     label = f'Agent {j+1} (Pop {population})'
                     handles.append(line)
                     labels.append(label)
                     added_agents.add((population, agent_in_pop))
 
-            # Handle legend creation based on number of agents
-            if len(self.agents) > 12:
+            # Gérer la création de la légende en fonction du nombre d'agents
+            if len(self.agents[:total_voters]) > 12:
                 handles = []
                 labels = []
-                # Calculate number of populations dynamically
-                n_populations = len(set([(j // self.n_agents_per_population) + 1
-                                         for j in range(len(self.agents))]))
+                # Calculer le nombre de populations dynamiquement
+                n_populations = len(set([(j // n_voters_per_population) + 1
+                                       for j in range(len(self.agents[:total_voters]))]))
                 for pop in range(1, n_populations + 1):
                     color = colormap(pop - 1)
                     handles.append(plt.Line2D([0], [0], color=color, lw=2))
                     labels.append(f'Population {pop}')
                 ax.legend(handles=handles, labels=labels,
                           title='Populations', bbox_to_anchor=(1.05, 1), loc='upper left')
-            elif handles:  # Only add legend if there are handles to show
+            elif handles:  # Ajouter la légende uniquement s'il y a des handles à afficher
                 ax.legend(handles=handles, labels=labels,
                           title='Agents', bbox_to_anchor=(1.05, 1), loc='upper left')
 
             ax.set_ylabel(f'Node {i+1}\nExpected Mean')
             ax.grid(True, linestyle='--', alpha=0.7)
 
-        # Set xlabel only for the bottom subplot
+        # Définir xlabel uniquement pour le sous-graphe du bas
         axs[-1].set_xlabel('Time Steps')
         plt.suptitle('Expected Mean Trajectories by Node and Agent', y=1.02)
         plt.tight_layout(rect=[0, 0.03, 0.85, 0.95])
