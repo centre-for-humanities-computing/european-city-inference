@@ -13,8 +13,21 @@ dependencies = [
     "scikit-learn>=1.7.0",
 ]
 
-[dependency-groups]
+[project.optional-dependencies]
 dev = [
-    "ipykernel>=6.29.5",
-    "uv>=0.7.12",
+    "pre-commit>=4.2.0",
+    "ipython>=9.0.2",
+    "jupyter>=1.1.1",
+    "watermark",
+    "ruff",
 ]
+
+[tool.ruff]
+extend-include = ["*.ipynb"]
+
+[tool.ruff.lint]
+select = ["D"]
+ignore = ["D100", "D104"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "numpy"
