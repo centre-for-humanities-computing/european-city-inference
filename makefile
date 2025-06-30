@@ -6,6 +6,10 @@ install:
 	bash -c "source .venv/bin/activate"
 	uv sync
 
+run-jupyterlab:
+	uv run ipython kernel install --user --env VIRTUAL_ENV $(pwd)/.venv --name=european_cities
+	uv run --with jupyter jupyter lab --port 4444
+
 pre-commit:
 	@echo "--- 🧹 Running pre-commit on all files ---"
 	uv run pre-commit install
