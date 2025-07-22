@@ -5,12 +5,17 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "altair>=5.5.0",
+    "bokeh>=3.7.3",
     "ipykernel>=6.29.5",
     "matplotlib>=3.10.3",
+    "mesa>=3.2.0",
+    "networkx>=3.5",
     "numpy>=2.3.0",
     "pandas>=2.3.0",
     "pyhgf>=0.2.7",
     "scikit-learn>=1.7.0",
+    "solara>=1.49.0",
 ]
 
 [project.optional-dependencies]
