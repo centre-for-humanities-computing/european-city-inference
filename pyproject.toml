@@ -10,12 +10,20 @@ dependencies = [
     "ipykernel>=6.29.5",
     "matplotlib>=3.10.3",
     "mesa>=3.2.0",
+    "myst>=1.0.4",
+    "myst-parser>=4.0.1",
+    "mystmd>=1.6.0",
     "networkx>=3.5",
     "numpy>=2.3.0",
     "pandas>=2.3.0",
     "pyhgf>=0.2.7",
     "scikit-learn>=1.7.0",
     "solara>=1.49.0",
+    "sphinx>=8.2.3",
+    "vega>=4.1.0",
+    "vega-datasets>=0.9.0",
+    "vegafusion>=2.0.2",
+    "vl-convert-python>=1.8.0",
 ]
 
 [project.optional-dependencies]
