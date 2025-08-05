@@ -16,8 +16,39 @@ project:
 
   toc:
     - file: index.md
+    - file: How to use it.md
+    - file: simulation_n_agent.ipynb
+
   authors:
   - name: Sylvain Estebe*
+    affiliation: centre-for-humanities-computing
+    email: sylvain.estebe@gmail.com
+    orcid: 0009-0006-6020-869X
+    github: SylvainEstebe
+    equal_contributor: true
+    roles:
+      - conceptualization
+      - analysis
+      - visualization
+      - software
+      - validation
+      - writing
+      - editing
+  - name: Kenneth Enevoldsen*
+    affiliation: centre-for-humanities-computing
+    email: sylvain.estebe@gmail.com
+    orcid: 0009-0006-6020-869X
+    github: SylvainEstebe
+    equal_contributor: true
+    roles:
+      - conceptualization
+      - analysis
+      - visualization
+      - software
+      - validation
+      - writing
+      - editing
+  - name: Kristoffer Nielbo*
     affiliation: centre-for-humanities-computing
     email: sylvain.estebe@gmail.com
     orcid: 0009-0006-6020-869X

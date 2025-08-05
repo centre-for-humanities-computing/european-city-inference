@@ -1,5 +1,12 @@
 # my_module/environment.py
 import numpy as np
+class Environment:
+    """Contient l'état partagé de la simulation."""
+    def __init__(self, candidates: list, input_data):
+        self.candidates = candidates
+        self.input_data = input_data
+
+
 
 def generate_observations(
     n_nodes, n_steps, scenario=1, shock_pattern=None,

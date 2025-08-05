@@ -1,96 +1,47 @@
-# simulation_logic.py
-
+# simulation.py
+from tqdm import tqdm
 import jax
-import jax.numpy as jnp
-import pyhgf
-from agents import Electeur, Candidat
-from pyhgf_utils import hgf_update_state # Voir la section suivante
 
-def calculate_kl_divergence(mu_belief, prec_belief, mean_pref, precision_pref):
-    # La fonction est déjà JAX-compatible, c'est bien.
-    # ... (le code que tu as déjà) ...
-    var_belief = jnp.where(prec_belief > 0, 1 / prec_belief, jnp.inf)
-    var_pref = jnp.where(precision_pref > 0, 1 / precision_pref, jnp.inf)
+from agent import HGFAgent
+from environement import Environment
+from data_collector import DataCollector
 
-    kl = jnp.log(jnp.sqrt(var_pref) / jnp.sqrt(var_belief)) + \
-         (var_belief + (mu_belief - mean_pref) ** 2) / (2 * var_pref) - 0.5
-    return kl
+class Simulation:
+    """Orchestrates the running of multiple election simulations."""
 
-# @jax.jit pour compiler cette fonction une seule fois
-@jax.jit
-def get_vote_for_agent(rng_key, electeur: Electeur, candidats: Candidat, input_data):
-    """
-    Fonction pure pour obtenir le vote d'un seul agent.
-    Elle prend l'agent en entrée et retourne le résultat de son vote.
-    """
-    # 1. Mettre à jour l'état HGF avec les nouvelles observations
-    # On suppose que pyhgf a une fonction JAX-compatible pour la mise à jour
-    new_pyhgf_network_state = hgf_update_state(electeur.pyhgf_network_state, input_data)
+    def __init__(self, sim_params: dict, agent_params: list, candidates: list, base_hgf_network, decision_strategy, voting_system, input_data):
+        self.n_simulations = sim_params['n_simulations']
+        self.agent_params = agent_params
+        self.base_hgf_network = base_hgf_network
+        self.decision_strategy = decision_strategy
+        self.voting_system = voting_system
+        self.data_collector = DataCollector()
+        self.environment = Environment(candidates, input_data)
 
-    # 2. Extraire les croyances du nouvel état du réseau
-    # L'accès aux attributs doit être adapté pour être JAX-compatible
-    # Par exemple, si l'état est un dictionnaire, utiliser un get ou un jnp.array
-    # Ici, nous supposons que pyhgf_network_state a une structure fixe
-    mu_belief = jnp.array([
-        new_pyhgf_network_state[i]["expected_mean"][-1]
-        for i in range(len(electeur.preferences))
-    ])
-    prec_belief = jnp.array([
-        new_pyhgf_network_state[i]["expected_precision"][-1]
-        for i in range(len(electeur.preferences))
-    ])
+    def run(self, key):
+        """Launches the series of simulations."""
+        agents = [
+            HGFAgent(
+                agent_id=i,
+                base_hgf_network=self.base_hgf_network,
+                decision_strategy=self.decision_strategy,
+                preferences=params['preferences'],
+                tonic_volatility=params['tonic_volatility']
+            ) for i, params in enumerate(self.agent_params)
+        ]
 
-    # 3. Calculer la "dissatisfaction" actuelle
-    mean_pref = electeur.preferences[:, 0]
-    precision_pref = electeur.preferences[:, 1]
-    current_dissatisfaction = calculate_kl_divergence(mu_belief, prec_belief, mean_pref, precision_pref)
-    total_current_dissatisfaction = jnp.sum(current_dissatisfaction)
-    
-    # 4. Calculer la "dissatisfaction" pour chaque candidat (vectorisation manuelle)
-    # On utilise vmap ici car on a un tableau de candidats
-    def dissatisfaction_for_candidate(candidate_preferences):
-        candidate_mean_pref = candidate_preferences[:, 0]
-        candidate_precision_pref = candidate_preferences[:, 1]
-        expected_dissatisfaction = calculate_kl_divergence(mu_belief, prec_belief, candidate_mean_pref, candidate_precision_pref)
-        return jnp.sum(expected_dissatisfaction)
+        # --- NEW LEARNING STEP ADDED HERE ---
+        print("Running the initial learning phase for all agents...")
+        for agent in tqdm(agents, desc="Agent Learning"):
+            agent.learn(self.environment.input_data)
+        print("Learning phase complete.")
+        # --- END OF NEW STEP ---
 
-    total_expected_dissatisfactions = jax.vmap(dissatisfaction_for_candidate)(candidats.preferences)
+        simulation_keys = jax.random.split(key, self.n_simulations)
 
-    candidate_preferences_scores = total_current_dissatisfaction - total_expected_dissatisfactions
-    
-    # 5. Obtenir la décision de vote
-    softmax_probs = jax.nn.softmax(candidate_preferences_scores)
-    vote_decision = jax.random.categorical(rng_key, jnp.log(softmax_probs))
+        for i in tqdm(range(self.n_simulations), desc="Simulations"):
+            # Now, run_election only performs JAX-compatible operations
+            election_results = self.voting_system.run_election(agents, self.environment, simulation_keys[i])
+            self.data_collector.record_simulation(i + 1, election_results)
 
-    # Retourner le nouvel état de l'électeur et le vote
-    # On crée une nouvelle instance d'Electeur avec l'état HGF mis à jour
-    # Les préférences ne changent pas pour le moment
-    new_electeur = Electeur(electeur.key, electeur.preferences, new_pyhgf_network_state)
-    return new_electeur, vote_decision
-
-@jax.jit
-def decision_modele_base(electeur, candidats):
-    # Logique coûteuse : simuler les conséquences du vote
-    # ... utiliser le réseau pyhgf pour des projections ...
-    return jnp.argmax(simulated_outcome_values)
-
-@jax.jit
-def decision_modele_libre(electeur, candidats):
-    # Logique simple : se baser sur la dernière expérience réussie
-    # ... utiliser l'historique ou une préférence fixe ...
-    return electeur.last_successful_vote
-
-@jax.jit
-def get_vote_for_agent(rng_key, electeur: Electeur, candidats: Candidat, input_data):
-    # ... (mise à jour de l'état HGF) ...
-
-    # Choisir la fonction de décision en fonction de l'état
-    chosen_decision_fn = jax.lax.cond(
-        electeur.decision_mode == 1,
-        lambda e, c: decision_modele_base(e, c),
-        lambda e, c: decision_modele_libre(e, c),
-        electeur, candidats
-    )
-    vote_decision = chosen_decision_fn
-    # ... (le reste de la fonction) ...
-    return new_electeur, vote_decision
+        return self.data_collector.get_dataframe()

@@ -4,8 +4,6 @@ import jax
 import jax.numpy as jnp
 from scipy.stats import norm, halfnorm
 from numpy.typing import ArrayLike
-from plot import plot_distributions, plot_kl_divergences, plot_time_series
-from environement import generate_observations
 
 
 def calculate_kl_divergence(mu_belief, prec_belief, mean_pref, precision_pref):
