@@ -1,101 +1,93 @@
-# my_module/voting.py
-import numpy as np
 import jax
 import jax.numpy as jnp
-from scipy.stats import norm, halfnorm
-from numpy.typing import ArrayLike
+from jax import Array, jit
+from pyhgf.typing import Attributes, Edges
+from jax.typing import ArrayLike
+from functools import partial
 
+def calculate_kl_divergence(
+    mean_belief: ArrayLike,
+    precision_belief: ArrayLike,
+    mean_pref: ArrayLike,
+    precision_pref: ArrayLike,
+) -> Array:
+    """Calculate the KL divergence between two Gaussian distributions.
 
-def calculate_kl_divergence(mu_belief, prec_belief, mean_pref, precision_pref):
-    """
-    Calculate the KL divergence between two Gaussian distributions.
-
-    Args:
-        mu_belief: Mean of the belief distribution.
-        prec_belief: Precision of the belief distribution.
-        mean_pref: Mean of the preference distribution.
-        precision_pref: Precision of the preference distribution.
+    Parameters
+    ----------
+    mu_belief :
+        Mean of the belief distribution.
+    prec_belief :
+        Precision of the belief distribution.
+    mean_pref :
+        Mean of the preference distribution.
+    precision_pref :
+        Precision of the preference distribution.
 
     Returns
     -------
         KL divergence.
     """
     # Convert precision to variance
-    var_belief = jnp.where(prec_belief > 0, 1 / prec_belief, jnp.inf)
-    var_pref = jnp.where(precision_pref > 0, 1 / precision_pref, jnp.inf)
+    var_belief = 1 / precision_belief
+    var_pref = 1 / precision_pref
 
     # Calculate KL divergence using the analytical formula for Gaussian distributions
     kl = (
         jnp.log(jnp.sqrt(var_pref) / jnp.sqrt(var_belief))
-        + (var_belief + (mu_belief - mean_pref) ** 2) / (2 * var_pref)
+        + (var_belief + (mean_belief - mean_pref) ** 2) / (2 * var_pref)
         - 0.5
     )
     return kl
 
 
+@partial(jit, static_argnames=("edges", "input_idxs"))
 def get_votes(
-    tonic_volatility: float,
     key: jax.random.PRNGKey,
-    network: object,
-    input_data: ArrayLike,
-    n_preferences: int,
+    attributes: Attributes,
+    edges: Edges,
+    node_trajectories: dict,
+    input_idxs: tuple,
     candidates: list,
-) -> tuple:
-    """
-    Get votes based on network attributes and input data.
+) -> Array:
+    """Get votes based on network attributes and input data.
 
-    Args:
-        tonic_volatility: float, tonic volatility parameter.
-        key: jax.random.PRNGKey, random key for JAX.
-        network: object, network object with attributes and node_trajectories.
-        input_data: ArrayLike, input data for the network.
-        n_preferences: int, number of preferences.
-        candidates: list, list of candidate preferences.
+    Parameters
+    ----------
+    key :
+        Random key for JAX.
+    Network:
+        The network containing the attributes and node trajectories.
+    candidates :
+        List of candidate preferences.
 
     Returns
     -------
-        tuple: Updated network attributes and node trajectories.
+        The index of the selected candidate.
+
     """
-    # Initialize the last node's attributes if not already present
-    if "preferences" not in network.attributes[-1]:
-        network.attributes[-1]["preferences"] = []
-
-    # Loop to sample and store tuples
-    for _ in range(n_preferences):
-        mu = norm.rvs(2, 1)
-        sigma = halfnorm.rvs(0, 1)
-        network.attributes[-1]["preferences"].append(
-            (np.float64(mu), np.float64(sigma))
-        )
-
-    # Set different parameters for this agent
-    for i in [3, 4, 5]:
-        network.attributes[i]["tonic_volatility"] = tonic_volatility
-
-    network.input_data(input_data=input_data)  # Add observations
-
-    # Get the preferences from the last node of the network
-    preferences = network.attributes[-1].get("preferences", [])
-    mean_pref = jnp.array([float(pref[0]) for pref in preferences])
-    precision_pref = jnp.array([float(pref[1]) for pref in preferences])
+    # get continuous nodes matching preferences
+    preferences_idx = [
+        edges[idx].value_parents[0] for idx in input_idxs
+    ]
 
     # Get the beliefs from the network
-    start_index = len(preferences)
-    mu_belief = jnp.array(
-        [
-            network.node_trajectories[i + start_index]["expected_mean"][-1]
-            for i in range(len(preferences))
-        ]
+    expected_mean = jnp.array(
+        [node_trajectories[i]["expected_mean"][-1] for i in preferences_idx]
     )
-    prec_belief = jnp.array(
+    expected_precision = jnp.array(
         [
-            network.node_trajectories[i + start_index]["expected_precision"][-1]
-            for i in range(len(preferences))
+            node_trajectories[i]["expected_precision"][-1]
+            for i in preferences_idx
         ]
     )
 
+    # compute the dissatisfaction based on the current beliefs
     current_dissatisfaction = calculate_kl_divergence(
-        mu_belief, prec_belief, mean_pref, precision_pref
+        expected_mean,
+        expected_precision,
+        attributes[-1]["preferences"]["mean"],
+        attributes[-1]["preferences"]["precision"],
     )
     total_current_dissatisfaction = jnp.sum(current_dissatisfaction)
 
@@ -104,16 +96,15 @@ def get_votes(
 
     # For each candidate, calculate the expected dissatisfaction in a vectorized manner
     for candidate in candidates:
-        candidate_mean_pref = jnp.array(
-            [float(preference[0]) for preference in candidate]
-        )
-        candidate_precision_pref = jnp.array(
-            [float(preference[1]) for preference in candidate]
-        )
 
-        # Calculate the expected dissatisfaction for this candidate in a vectorized manner
+        candidate_mean_pref, candidate_precision_pref = candidate
+
+        # Calculate the expected dissatisfaction for this candidate
         expected_dissatisfaction = calculate_kl_divergence(
-            mu_belief, prec_belief, candidate_mean_pref, candidate_precision_pref
+            expected_mean,
+            expected_precision,
+            candidate_mean_pref,
+            candidate_precision_pref
         )
         total_expected_dissatisfaction = jnp.sum(expected_dissatisfaction)
         candidate_preferences.append(
@@ -128,9 +119,6 @@ def get_votes(
 
     # Log of softmax_probs for the voting distribution
     log_softmax_probs = jnp.log(softmax_probs)
-    vote_decisions = jax.random.categorical(key, log_softmax_probs)
+    vote = jax.random.categorical(key, log_softmax_probs)
 
-    # Update the network attributes with the vote decisions
-    network.attributes[-1]["votes"] = vote_decisions
-
-    return network.attributes, network.node_trajectories
+    return vote
