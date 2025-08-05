@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 
+
 class VotingSystem(ABC):
     """Classe de base abstraite pour un système de vote."""
 

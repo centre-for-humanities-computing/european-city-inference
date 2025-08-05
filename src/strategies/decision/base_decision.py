@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 
+
 class DecisionStrategy(ABC):
     """Classe de base abstraite pour la stratégie de décision d'un agent."""
 
