@@ -1,13 +1,25 @@
-# my_module/environment.py
-import numpy as np
+# voting_simulation/environment/environment.py
 
+from typing import List, Dict
+import numpy as np
+from agents.voter import Voter
 
 class Environment:
-    """Contient l'état partagé de la simulation."""
+    """Manages the world state and notifies observers of changes."""
+    def __init__(self, num_dimensions: int):
+        self._observers: List[Voter] = []
+        self.num_dimensions = num_dimensions
+        self.world_state: Dict[str, np.ndarray] = {
+            'mu': np.random.rand(num_dimensions),
+            'sigma': np.random.rand(num_dimensions) * 0.1 + 0.05
+        }
 
-    def __init__(self, candidates: list, input_data):
-        self.candidates = candidates
-        self.input_data = input_data
+    def register(self, observer: Voter):
+        self._observers.append(observer)
+
+    def notify(self, event: Dict[str, np.ndarray]):
+        for observer in self._observers:
+            observer.update(event)
 
 
 def generate_observations(
