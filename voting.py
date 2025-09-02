@@ -43,7 +43,7 @@ def calculate_kl_divergence(
     return kl
 
 
-@partial(jit, static_argnames=("edges", "input_idxs"))
+@partial(jit, static_argnames=("edges", "input_idxs", "voting_system"))
 def get_votes(
     key: jax.random.PRNGKey,
     attributes: Attributes,
@@ -52,40 +52,53 @@ def get_votes(
     input_idxs: tuple,
     candidates: list,
     mask: Array,
+    voting_system: str = "basic",  # "basic", "ranked", "quadratic"
 ) -> Array:
-    """Get votes based on network attributes and input data.
+    """Get votes based on network attributes and input data, using different voting systems.
 
     Parameters
     ----------
-    key :
+    key : jax.random.PRNGKey
         Random key for JAX.
-    Network:
-        The network containing the attributes and node trajectories.
-    candidates :
-        List of candidate preferences.
+    attributes : Attributes
+        Network-level attributes, including preference priors.
+    edges : Edges
+        Network structure mapping nodes to parents.
+    node_trajectories : dict
+        Dictionary of node belief trajectories (expected_mean, expected_precision).
+    input_idxs : tuple
+        Indices of input nodes whose preferences are considered.
+    candidates : list
+        List of candidate preferences (mean, precision).
+    mask : Array
+        Boolean mask of valid candidates.
+    voting_system : str, optional
+        Voting system to use:
+        - "basic" (default): softmax sampling of a single candidate.
+        - "ranked": full ranking of candidates (descending preference).
+        - "quadratic": quadratic vote allocation based on preference strength.
 
     Returns
     -------
-        The index of the selected candidate.
-
+    Array
+        The voting outcome, depending on the voting system:
+        - "basic": index of the chosen candidate (int).
+        - "ranked": ranking array of candidate indices (e.g., [2, 0, 1]).
+        - "quadratic": array of quadratic vote allocations per candidate.
     """
-    # get continuous nodes matching preferences
-    preferences_idx = [
-        edges[idx].value_parents[0] for idx in input_idxs
-    ]
 
-    # Get the beliefs from the network
+    
+    preferences_idx = [edges[idx].value_parents[0] for idx in input_idxs]
+
+    # Extract current beliefs
     expected_mean = jnp.array(
         [node_trajectories[i]["expected_mean"][-1] for i in preferences_idx]
     )
     expected_precision = jnp.array(
-        [
-            node_trajectories[i]["expected_precision"][-1]
-            for i in preferences_idx
-        ]
+        [node_trajectories[i]["expected_precision"][-1] for i in preferences_idx]
     )
 
-    # compute the dissatisfaction based on the current beliefs
+    # Compute dissatisfaction with current state
     current_dissatisfaction = calculate_kl_divergence(
         expected_mean,
         expected_precision,
@@ -94,15 +107,10 @@ def get_votes(
     )
     total_current_dissatisfaction = jnp.sum(current_dissatisfaction)
 
-    # Initialize a list to store the voting decisions for each candidate
+    # Evaluate each candidate ----
     candidate_preferences = []
-
-    # For each candidate, calculate the expected dissatisfaction in a vectorized manner
     for candidate in candidates:
-
         candidate_mean_pref, candidate_precision_pref = candidate
-
-        # Calculate the expected dissatisfaction for this candidate
         expected_dissatisfaction = calculate_kl_divergence(
             expected_mean,
             expected_precision,
@@ -114,19 +122,33 @@ def get_votes(
             total_current_dissatisfaction - total_expected_dissatisfaction
         )
 
-    # Convert candidate_preferences to JAX array
     candidate_preferences = jnp.array(candidate_preferences)
-    # Softmax of candidate_preferences to get probabilities
-    softmax_probs = jax.nn.softmax(candidate_preferences)
 
-    # Log of softmax_probs for the voting distribution
-    log_softmax_probs = jnp.log(softmax_probs)
-    log_softmax_probs = jnp.where(mask, log_softmax_probs, -jnp.inf)
+    # Voting system switch ----
+    if voting_system == "basic":
+        # Softmax choice among candidates
+        softmax_probs = jax.nn.softmax(candidate_preferences)
+        log_softmax_probs = jnp.log(softmax_probs)
+        log_softmax_probs = jnp.where(mask, log_softmax_probs, -jnp.inf)
+        vote = jax.random.categorical(key, log_softmax_probs)
+        return vote
 
-    vote = jax.random.categorical(key, log_softmax_probs)
+    elif voting_system == "ranked":
+        # Full ranking = argsort of preferences (descending order: best first)
+        ranking = jnp.argsort(-candidate_preferences)
+        return ranking
 
-    return vote
+    elif voting_system == "quadratic":
+        # Allocate "voice credits" proportional to preference strength
+        budget = 100.0
+        raw_votes = jnp.maximum(candidate_preferences, 0.0)
+        sqrt_alloc = raw_votes / (jnp.sum(raw_votes) + 1e-8) * jnp.sqrt(budget)
+        votes = jnp.floor(sqrt_alloc**2)  # integer voice credits
+        return votes
 
+    else:
+        raise ValueError(f"Unknown voting system: {voting_system}")
+    
 def generate_observations(
     n_nodes,
     n_steps,
@@ -259,12 +281,27 @@ def individual_vote(
     key, 
     network, 
     candidates,
-    preferences_idx: list, 
+    n_preferences: int, 
     input_data,
     mask,
+    voting_system,
 ):
-    
-    # update the tonic volatilities for this agent
+
+    # Sample preferences for the agent
+    mus, pis = [], []
+    for _ in range(n_preferences):
+        mus.append(norm.rvs(2, 1))
+        pis.append(halfnorm.rvs(0, 1))
+    network.attributes[-1]["preferences"] = {
+        "mean": np.array(mus), 
+        "precision": np.array(pis)
+    }
+
+    # Get continuous nodes matching preferences
+    preferences_idx = [
+            network.edges[idx].value_parents[0] for idx in network.input_idxs
+        ]
+    # Update the tonic volatilities for this agent
     for idx in preferences_idx:
         network.attributes[idx]["tonic_volatility"] = tonic_volatility
 
@@ -277,5 +314,6 @@ def individual_vote(
         network.node_trajectories,
         network.input_idxs,
         candidates,
-        mask
+        mask,
+        voting_system
     )
