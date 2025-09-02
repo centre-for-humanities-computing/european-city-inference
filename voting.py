@@ -126,17 +126,16 @@ def get_votes(
 
     # Voting system switch ----
     if voting_system == "basic":
-        # Softmax choice among candidates
-        softmax_probs = jax.nn.softmax(candidate_preferences)
-        log_softmax_probs = jnp.log(softmax_probs)
-        log_softmax_probs = jnp.where(mask, log_softmax_probs, -jnp.inf)
-        vote = jax.random.categorical(key, log_softmax_probs)
+        masked_preferences = jnp.where(mask, candidate_preferences, -jnp.inf)
+        softmax_probs = jax.nn.softmax(masked_preferences)
+        vote = jax.random.categorical(key, jnp.log(softmax_probs))
         return vote
 
     elif voting_system == "ranked":
         # Full ranking = argsort of preferences (descending order: best first)
-        ranking = jnp.argsort(-candidate_preferences)
-        return ranking
+        masked_preferences = jnp.where(mask, candidate_preferences, -jnp.inf)
+        ranking = jnp.argsort(-masked_preferences)
+        return ranking[0]  # still returns the best candidate among the unmasked ones
 
     elif voting_system == "quadratic":
         # Allocate "voice credits" proportional to preference strength
@@ -307,7 +306,8 @@ def individual_vote(
 
     network.input_data(input_data=input_data);  # Add observations
 
-    return get_votes(
+    # Compute votes
+    vote = get_votes(
         key, 
         network.attributes,
         network.edges,
@@ -317,3 +317,39 @@ def individual_vote(
         mask,
         voting_system
     )
+
+    # Compute dissatisfaction per candidate for this agent
+    dissatisfaction_scores = total_dissatisfaction_per_candidate(
+        node_trajectories=network.node_trajectories,
+        input_idxs=network.input_idxs,
+        candidates=candidates,
+        attributes=network.attributes
+    )
+
+    return vote, dissatisfaction_scores
+
+def total_dissatisfaction_per_candidate(
+    node_trajectories: dict,
+    input_idxs: tuple,
+    candidates: list,
+    attributes: list
+) -> jnp.ndarray:
+    # Extract current beliefs
+    expected_mean = jnp.array([node_trajectories[i]["expected_mean"][-1] for i in input_idxs])
+    expected_precision = jnp.array([node_trajectories[i]["expected_precision"][-1] for i in input_idxs])
+
+    # Current dissatisfaction relative to baseline
+    baseline_mean = attributes[-1]["preferences"]["mean"]
+    baseline_precision = attributes[-1]["preferences"]["precision"]
+    current_dissatisfaction = jnp.sum(calculate_kl_divergence(
+        expected_mean, expected_precision, baseline_mean, baseline_precision
+    ))
+
+    def candidate_dissatisfaction(candidate):
+        mean_pref, precision_pref = candidate
+        kl = calculate_kl_divergence(expected_mean, expected_precision, mean_pref, precision_pref)
+        total_kl = jnp.sum(kl)
+        return current_dissatisfaction - total_kl
+
+    total_diss = jnp.array([candidate_dissatisfaction(c) for c in candidates])
+    return total_diss
