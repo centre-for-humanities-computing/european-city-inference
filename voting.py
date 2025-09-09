@@ -12,7 +12,7 @@ def calculate_kl_divergence(
     precision_belief: ArrayLike,
     mean_pref: ArrayLike,
     precision_pref: ArrayLike,
-) -> Array:
+) -> ArrayLike:
     """Calculate the KL divergence between two Gaussian distributions.
 
     Parameters
@@ -42,7 +42,6 @@ def calculate_kl_divergence(
     )
     return kl
 
-
 @partial(jit, static_argnames=("edges", "input_idxs", "voting_system"))
 def get_votes(
     key: jax.random.PRNGKey,
@@ -51,9 +50,9 @@ def get_votes(
     node_trajectories: dict,
     input_idxs: tuple,
     candidates: list,
-    mask: Array,
+    mask: ArrayLike,
     voting_system: str = "basic",  # "basic", "ranked", "quadratic"
-) -> Array:
+) -> ArrayLike:
     """Get votes based on network attributes and input data, using different voting systems.
 
     Parameters
@@ -166,100 +165,74 @@ def generate_observations(
     shock_time=None,
     recovery_time=None,
     trend_shape="linear",
-):
+    dispersion=1.0
+) -> np.ndarray:
     """
     Generate observations for nodes based on specified scenarios and shock patterns.
-
-    Parameters
-    ----------
-    - n_nodes: int, number of nodes.
-    - n_steps: int, number of time steps.
-    - scenario: int, scenario type (1 or 2).
-    - shock_pattern: str, pattern of shock ("phase", "sudden", "trend", or None).
-    - shock_time: int, time step at which the shock occurs.
-    - recovery_time: int, time step at which recovery begins.
-    - trend_shape: str, shape of the trend ("linear" or other shapes).
-
-    Returns
-    -------
-    - numpy.ndarray, array of generated observations.
     """
     np.random.seed(42)  # Fix seed for reproducibility
     node_observations = []
-    # Default beta parameters for the nodes
-    phase1_params = (5, 1)
+
+    phase1_params = (15, 1)
     phase2_params = (2, 2)
     phase3_params = phase1_params
 
     def generate_beta(params, size):
-        return np.random.beta(a=params[0], b=params[1], size=size)
+        a, b = params
+        obs = np.random.beta(a, b, size=size)
+        # Ajouter un bruit gaussien pour la dispersion
+        obs += np.random.normal(0, 0.05 * dispersion, size=size)
+        return np.clip(obs, 0, 1)
 
     for node in range(n_nodes):
-        # Scenario 1: Stable observations
         if scenario == 1:
             node_observations.append(generate_beta(phase1_params, n_steps))
-        # Scenario 2: Shock scenarios
         elif scenario == 2:
             shock_time = shock_time or n_steps // 3
             recovery_time = recovery_time or 2 * n_steps // 3
+
             if shock_pattern in [None, "phase"]:
-                phase1_end, phase2_end = (
-                    (shock_time, recovery_time)
-                    if recovery_time
-                    else (n_steps // 3, 2 * n_steps // 3)
-                )
-                obs = np.concatenate(
-                    [
-                        generate_beta(phase1_params, phase1_end),
-                        generate_beta(phase2_params, phase2_end - phase1_end),
-                        generate_beta(phase3_params, n_steps - phase2_end),
-                    ]
-                )
+                phase1_end, phase2_end = shock_time, recovery_time
+                obs = np.concatenate([
+                    generate_beta(phase1_params, phase1_end),
+                    generate_beta(phase2_params, phase2_end - phase1_end),
+                    generate_beta(phase3_params, n_steps - phase2_end)
+                ])
             elif shock_pattern == "sudden":
-                obs = np.concatenate(
-                    [
-                        generate_beta(phase1_params, shock_time),
-                        generate_beta(phase2_params, recovery_time - shock_time),
-                        generate_beta(phase3_params, n_steps - recovery_time),
-                    ]
-                )
+                obs = np.concatenate([
+                    generate_beta(phase1_params, shock_time),
+                    generate_beta(phase2_params, recovery_time - shock_time),
+                    generate_beta(phase3_params, n_steps - recovery_time)
+                ])
             elif shock_pattern == "trend":
                 obs = np.zeros(n_steps)
                 for t in range(recovery_time):
-                    weight = (
-                        (t / recovery_time)
-                        if trend_shape == "linear"
-                        else (t / recovery_time) ** 2
-                    )
+                    weight = (t / recovery_time) if trend_shape == "linear" else (t / recovery_time) ** 2
                     alpha = phase1_params[0] * (1 - weight) + phase2_params[0] * weight
-                    beta_param = (
-                        phase1_params[1] * (1 - weight) + phase2_params[1] * weight
-                    )
-                    obs[t] = generate_beta((alpha, beta_param), 1)
+                    beta_param = phase1_params[1] * (1 - weight) + phase2_params[1] * weight
+                    obs[t] = generate_beta((alpha, beta_param), 1)[0]  # <-- attention ici
                 for t in range(recovery_time, n_steps):
-                    weight = (
-                        1 - ((t - recovery_time) / (n_steps - recovery_time))
-                        if trend_shape == "linear"
-                        else (1 - (t - recovery_time) / (n_steps - recovery_time)) ** 2
-                    )
+                    weight = (1 - (t - recovery_time) / (n_steps - recovery_time)) if trend_shape == "linear" else (1 - (t - recovery_time) / (n_steps - recovery_time)) ** 2
                     alpha = phase2_params[0] * (1 - weight) + phase1_params[0] * weight
-                    beta_param = (
-                        phase2_params[1] * (1 - weight) + phase1_params[1] * weight
-                    )
-                    obs[t] = generate_beta((alpha, beta_param), 1)
+                    beta_param = phase2_params[1] * (1 - weight) + phase1_params[1] * weight
+                    obs[t] = generate_beta((alpha, beta_param), 1)[0]
             else:
                 raise ValueError("Invalid shock_pattern specified for scenario 2.")
             node_observations.append(obs)
         else:
             raise ValueError("Scenario must be 1 or 2.")
-    return jnp.column_stack(node_observations)
 
-def generate_candidates(n_candidates, n_preferences):
-    """Generates a list of candidates, each with random preferences.
+    return np.column_stack(node_observations)
 
-    Each candidate is assigned a set of preferences, modeled as Gaussian
-    distributions. The means (mu) are drawn from a normal distribution,
-    and the standard deviations (sigma) from a half-normal distribution.
+def generate_candidates(n_candidates, n_preferences, manual_means=None, manual_precisions=None):
+    """
+    Generates a list of candidates, each with preferences.
+
+    - If manual_means and manual_precisions are provided, they must be
+      numpy arrays (or nested lists) of shape (n_candidates, n_preferences).
+    - Otherwise, candidates are generated randomly:
+        mus ~ Normal(loc=2, scale=1)
+        pis ~ HalfNormal(scale=1)
 
     Parameters
     ----------
@@ -267,25 +240,43 @@ def generate_candidates(n_candidates, n_preferences):
         The number of candidates to generate.
     n_preferences : int
         The number of preferences for each candidate.
+    manual_means : array-like, optional
+        Shape (n_candidates, n_preferences). If provided, overrides random generation.
+    manual_precisions : array-like, optional
+        Shape (n_candidates, n_preferences). If provided, overrides random generation.
 
     Returns
     -------
     list of tuple of numpy.ndarray
         A list of candidates. Each candidate is represented as a tuple
-        containing two numpy arrays: one for the 'mu' values and one for
-        the 'sigma' values.
+        (mus, pis), where mus and pis are numpy arrays of length n_preferences.
     """
-    mu_sigma = 1
-    sigma_scale = 1
-        
-    candidates = []
-    for _ in range(n_candidates):
-        mus = norm.rvs(loc=2, scale=mu_sigma, size=n_preferences)
-        pis = halfnorm.rvs(scale=sigma_scale, size=n_preferences)
-        candidates.append((mus, pis))
+    if manual_means is not None and manual_precisions is not None:
+        manual_means = np.array(manual_means)
+        manual_precisions = np.array(manual_precisions)
+
+        assert manual_means.shape == (n_candidates, n_preferences), \
+            f"manual_means must be shape ({n_candidates}, {n_preferences})"
+        assert manual_precisions.shape == (n_candidates, n_preferences), \
+            f"manual_precisions must be shape ({n_candidates}, {n_preferences})"
+
+        candidates = [(manual_means[i], manual_precisions[i]) for i in range(n_candidates)]
+
+    else:
+        mu_sigma = 1
+        sigma_scale = 1
+
+        candidates = []
+        for _ in range(n_candidates):
+            mus = norm.rvs(loc=2, scale=mu_sigma, size=n_preferences)
+            pis = halfnorm.rvs(scale=sigma_scale, size=n_preferences)
+            candidates.append((mus, pis))
+
     return candidates
 
 def individual_vote(
+    mus: np.ndarray,
+    pis: np.ndarray,
     tonic_volatility: float, 
     key, 
     network, 
@@ -296,15 +287,23 @@ def individual_vote(
     voting_system,
 ):
 
-    # Sample preferences for the agent
-    mus, pis = [], []
-    for _ in range(n_preferences):
-        mus.append(norm.rvs(2, 1))
-        pis.append(halfnorm.rvs(0, 1))
-    network.attributes[-1]["preferences"] = {
+    if mus is None or pis is None:
+        # Sample preferences for the agent
+        mus, pis = [], []
+        for _ in range(n_preferences):
+            mus.append(norm.rvs(2, 1))
+            pis.append(halfnorm.rvs(0, 1))
+            network.attributes[-1]["preferences"] = {
         "mean": np.array(mus), 
         "precision": np.array(pis)
     }
+
+    else:
+    
+        network.attributes[-1]["preferences"] = {
+            "mean": mus, 
+            "precision": pis
+        }
 
     # Get continuous nodes matching preferences
     preferences_idx = [
@@ -391,3 +390,21 @@ def total_dissatisfaction_per_candidate(
     total_diss = jnp.array([candidate_dissatisfaction(c) for c in candidates])
 
     return total_diss
+
+def init_preferences(n_agents, n_preferences, manual_means=None, manual_precisions=None):
+    if manual_means is not None and manual_precisions is not None:
+        manual_means = np.array(manual_means)
+        manual_precisions = np.array(manual_precisions)
+        assert manual_means.shape == (n_agents, n_preferences)
+        assert manual_precisions.shape == (n_agents, n_preferences)
+        all_mus, all_pis = manual_means, manual_precisions
+    else:
+        all_mus, all_pis = [], []
+        for _ in range(n_agents):
+            mus = norm.rvs(4, 1, size=n_preferences)
+            pis = halfnorm.rvs(loc=0, scale=0.5, size=n_preferences)
+            all_mus.append(mus)
+            all_pis.append(pis)
+        all_mus = np.array(all_mus)
+        all_pis = np.array(all_pis)
+    return {"mean": all_mus, "precision": all_pis}
