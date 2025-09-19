@@ -22,7 +22,7 @@ abstract: |
     manipulate standard elections, it fails to do so under QV. Instead, the system favours candidates who
     genuinely reflect voters’ preferences. These findings offer strong computational support for the potential
     of quadratic voting to protect democratic integrity, and we provide tools to detect and analyse predatory
-    political 
+    political
 keywords:
   - collective behaviours
   - decision-making

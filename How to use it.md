@@ -137,7 +137,7 @@ while simulations > 0:
         attribute2, nodes_traje2 = vmap_get_votes_fn_2nd(tonic_volatilities, keys)
         votes_2nd_round = attribute2[-1]["votes"]
         counts_2nd = np.bincount(votes_2nd_round)
-        
+
         # Calculate proportions for the second round
         proportions_2nd = [v / sum(counts_2nd) for v in counts_2nd] if sum(counts_2nd) > 0 else []
     else:

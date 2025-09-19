@@ -1,9 +1,12 @@
 [project]
 name = "european-city-inference"
 version = "0.1.0"
-description = "Add your description here"
+description = "Un projet d'analyse et de simulation basé sur des agents pour..."
 readme = "README.md"
 requires-python = ">=3.12"
+authors = [
+    { name = "Votre Nom", email = "votre@email.com" },
+]
 dependencies = [
     "altair>=5.5.0",
     "bokeh>=3.7.3",
@@ -40,8 +43,14 @@ dev = [
 extend-include = ["*.ipynb"]
 
 [tool.ruff.lint]
-select = ["D"]
-ignore = ["D100", "D104"]
+# E = pycodestyle (erreurs), F = pyflakes (erreurs logiques), W = pycodestyle (warnings)
+# I = isort (tri des imports), D = pydocstyle (docstrings)
+select = ["E", "F", "W", "I", "D"]
+ignore = [
+    "D100", # Ignore "Missing docstring in public module"
+    "D104", # Ignore "Missing docstring in public package"
+    "D107", # Ignore "Missing docstring in __init__"
+]
 
 [tool.ruff.lint.pydocstyle]
 convention = "numpy"

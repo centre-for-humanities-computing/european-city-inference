@@ -1,0 +1,380 @@
+from functools import partial
+
+import jax
+import jax.numpy as jnp
+import numpy as np
+from jax import jit
+from jax.typing import ArrayLike
+from pyhgf.typing import Attributes, Edges
+from scipy.stats import halfnorm, norm
+
+
+def kl_divergence(
+    mean_belief: ArrayLike,
+    precision_belief: ArrayLike,
+    mean_pref: ArrayLike,
+    precision_pref: ArrayLike,
+) -> ArrayLike:
+    """Calculate the KL divergence between two Gaussian distributions.
+
+    Parameters
+    ----------
+    mean_belief :
+        Mean of the belief distribution.
+    precision_belief :
+        Precision of the belief distribution.
+    mean_pref :
+        Mean of the preference distribution.
+    precision_pref :
+        Precision of the preference distribution.
+
+    Returns
+    -------
+        KL divergence.
+
+    Raises
+    ------
+    ValueError
+        If precision values are not positive.
+    """
+    # Convert precision to variance
+    var_belief = 1 / precision_belief
+    var_pref = 1 / precision_pref
+
+    # Ensure variances are positive and finite
+    # if jnp.any(var_belief <= 0) or jnp.any(var_pref <= 0):
+    #    raise ValueError("Variances must be positive.")
+
+    # if jnp.any(jnp.isinf(var_belief)) or jnp.any(jnp.isinf(var_pref)):
+    #    raise ValueError("Variances must be finite.")
+
+    # Calculate KL divergence using the analytical formula for Gaussian distributions
+    kl = (
+        jnp.log(jnp.sqrt(var_pref) / jnp.sqrt(var_belief))
+        + (var_belief + (mean_belief - mean_pref) ** 2) / (2 * var_pref)
+        - 0.5
+    )
+    return kl
+
+
+@partial(jit, static_argnames=("edges", "input_idxs", "voting_system"))
+def get_votes(
+    key: jax.random.PRNGKey,
+    attributes: Attributes,
+    edges: Edges,
+    node_trajectories: dict,
+    input_idxs: tuple,
+    candidates: list,
+    mask: ArrayLike,
+    voting_system: str = "basic",  # "basic", "ranked", "quadratic"
+    average_proportions_vector=None,  # only for "basic (ToM)"
+) -> ArrayLike:
+    """Get votes based on network attributes and input data.
+
+    Parameters
+    ----------
+    key : jax.random.PRNGKey
+        Random key for JAX.
+    attributes : Attributes
+        Network-level attributes, including preference priors.
+    edges : Edges
+        Network structure mapping nodes to parents.
+    node_trajectories : dict
+        Dictionary of node belief trajectories (expected_mean, expected_precision).
+    input_idxs : tuple
+        Indices of input nodes whose preferences are considered.
+    candidates : list
+        List of candidate preferences (mean, precision).
+    mask : Array
+        Boolean mask of valid candidates.
+    voting_system : str, optional
+        Voting system to use:
+        - "basic" (default): softmax sampling of a single candidate.
+        - "ranked": full ranking of candidates (descending preference).
+        - "quadratic": quadratic vote allocation based on preference strength.
+
+    Returns
+    -------
+    Array
+        The voting outcome, depending on the voting system:
+        - "basic": index of the chosen candidate (int).
+        - "ranked": ranking array of candidate indices (e.g., [2, 0, 1]).
+        - "quadratic": array of quadratic vote allocations per candidate.
+    """
+    # Extract indices of continuous nodes matching preferences
+    preferences_idx = [edges[idx].value_parents[0] for idx in input_idxs]
+
+    # Extract current beliefs
+    expected_mean = jnp.array(
+        [node_trajectories[i]["expected_mean"][-1] for i in preferences_idx]
+    )
+    expected_precision = jnp.array(
+        [node_trajectories[i]["expected_precision"][-1] for i in preferences_idx]
+    )
+
+    # Compute dissatisfaction with current state
+    current_dissatisfaction = kl_divergence(
+        expected_mean,
+        expected_precision,
+        attributes[-1]["preferences"]["mean"],
+        attributes[-1]["preferences"]["precision"],
+    )
+
+    total_current_dissatisfaction = jnp.sum(current_dissatisfaction)
+
+    # Evaluate each candidate
+    candidate_preferences = []
+    for candidate in candidates:
+        candidate_mean_pref, candidate_precision_pref = candidate
+        expected_dissatisfaction = kl_divergence(
+            expected_mean,
+            expected_precision,
+            candidate_mean_pref,
+            candidate_precision_pref,
+        )
+        total_expected_dissatisfaction = jnp.sum(expected_dissatisfaction)
+        candidate_preferences.append(
+            total_current_dissatisfaction - total_expected_dissatisfaction
+        )
+
+    candidate_preferences = jnp.array(candidate_preferences)
+
+    # Voting system switch ----
+    # Basic voting: softmax sampling of a single candidate
+    if voting_system == "Plurality Voting":
+        masked_preferences = jnp.where(mask, candidate_preferences, -jnp.inf)
+        softmax_probs = jax.nn.softmax(masked_preferences)
+        vote = jax.random.categorical(key, jnp.log(softmax_probs))
+        return vote, softmax_probs, node_trajectories
+
+    # Basic voting with Theory of Mind: softmax sampling with weights
+    elif voting_system == "Plurality Voting (ToM)":
+        if average_proportions_vector is None:
+            raise ValueError(
+                "average_proportions_vector is required for 'basic (ToM)' voting system"
+            )
+        masked_preferences = jnp.where(mask, candidate_preferences, -jnp.inf)
+        softmax_probs = jax.nn.softmax(masked_preferences * average_proportions_vector)
+        vote = jax.random.categorical(key, jnp.log(softmax_probs))
+        return vote, softmax_probs, node_trajectories
+
+    # Ranked voting: full ranking of candidates
+    elif voting_system == "Ranking Voting":
+        masked_preferences = jnp.where(mask, candidate_preferences, -jnp.inf)
+        available = masked_preferences.copy()
+        ranking = []
+        for _ in range(masked_preferences.shape[0]):
+            softmax_probs = jax.nn.softmax(available)
+            choice = jax.random.categorical(key, jnp.log(softmax_probs))
+            ranking.append(choice)
+            available = available.at[choice].set(-jnp.inf)
+        ranking = jnp.array(ranking)
+        return ranking, softmax_probs, node_trajectories
+
+    # Quadratic voting: quadratic vote allocation based on preference strength
+    elif voting_system == "Quadratic Voting":
+        return None
+
+    else:
+        raise ValueError(f"Unknown voting system: {voting_system}")
+
+
+def individual_vote(
+    mus: np.ndarray,
+    pis: np.ndarray,
+    tonic_volatility: float,
+    key,
+    network,
+    candidates,
+    *,
+    n_preferences: int,
+    input_data,
+    mask,
+    voting_system,
+    average_proportions_vector=None,  # Only for "basic (ToM)"
+):
+    """Generate individual votes, preferences, and input data.
+
+    Parameters
+    ----------
+    mus : np.ndarray or None
+        Mean preferences for the agent. If None, new preferences are sampled.
+    pis : np.ndarray or None
+        Precision of preferences for the agent. If None, new precisions are sampled.
+    tonic_volatility : float
+        Volatility of tonic preferences for updating nodes.
+    key : jax.random.PRNGKey
+        Random key for JAX.
+    network : object
+        Contains network attributes, edges, and methods like `input_data`.
+    candidates : list
+        List of candidates (mean, precision) to vote on.
+    n_preferences : int
+        Number of preferences to generate if mus or pis is None.
+    input_data : array-like
+        Input data to update the network.
+    mask : array-like
+        Boolean mask of valid candidates.
+    voting_system : str
+        Voting system to use ("basic", "basic (ToM)", "ranked", "quadratic").
+    average_proportions_vector : array-like, optional
+        Weights for candidate probabilities in "basic (ToM)" voting system.
+
+    Returns
+    -------
+    Tuple of (vote, softmax_probs, dissatisfaction_scores)
+        Vote outcome, softmax probabilities for candidates, and dissatisfaction scores.
+    """
+    if mus is None or pis is None:
+        # Sample preferences for the agent if not provided
+        mus, pis = [], []
+        for _ in range(n_preferences):
+            mus.append(norm.rvs(2, 1))  # Sample from a normal distribution
+            pis.append(halfnorm.rvs(0, 1))  # Sample from a half-normal distribution
+        # Update network attributes with new preferences
+        network.attributes[-1]["preferences"] = {
+            "mean": np.array(mus),
+            "precision": np.array(pis),
+        }
+    else:
+        # Use provided preferences
+        network.attributes[-1]["preferences"] = {"mean": mus, "precision": pis}
+
+    # Get continuous nodes matching preferences
+    preferences_idx = [
+        network.edges[idx].value_parents[0] for idx in network.input_idxs
+    ]
+
+    # Update the tonic volatilities for this agent
+    for idx in preferences_idx:
+        network.attributes[idx]["tonic_volatility"] = tonic_volatility
+
+    # Add observations from input data
+    network.input_data(input_data=input_data)
+
+    # Compute votes using the get_votes function
+    vote, softmax_probs, node_trajectories = get_votes(
+        key,
+        network.attributes,
+        network.edges,
+        network.node_trajectories,
+        network.input_idxs,
+        candidates,
+        mask,
+        voting_system,
+        average_proportions_vector=average_proportions_vector,
+    )
+
+    # Compute dissatisfaction per candidate for this agent
+    dissatisfaction_scores = total_dissatisfaction_per_candidate(
+        node_trajectories=network.node_trajectories,
+        input_idxs=network.input_idxs,
+        candidates=candidates,
+        attributes=network.attributes,
+    )
+
+    return vote, softmax_probs, dissatisfaction_scores, node_trajectories
+
+
+def total_dissatisfaction_per_candidate(
+    node_trajectories: dict, input_idxs: tuple, candidates: list, attributes: list
+) -> jnp.ndarray:
+    """Compute the total dissatisfaction for each candidate.
+
+        This is based on the KL divergence between the agent's current beliefs and
+        the candidate's preferences.
+
+    Parameters
+    ----------
+    node_trajectories : dict
+        Dictionary mapping node indices to their belief trajectories, with keys:
+        "expected_mean" and "expected_precision" (arrays of shape [time_steps]).
+    input_idxs : tuple
+        Indices of the nodes whose preferences are considered.
+    candidates : list of tuple of ArrayLike
+        Each candidate is a tuple of (mean_pref, precision_pref), each an array
+        of the same length as `input_idxs`.
+    attributes : list of dict
+        Network attributes; the last element should contain the baseline preferences:
+        attributes[-1]["preferences"]["mean"] and ["precision"].
+
+    Returns
+    -------
+    jnp.ndarray
+        Array of shape (n_candidates,) containing total dissatisfaction scores for
+        each candidate. Higher values indicate candidates that better reduce
+        dissatisfaction relative to the baseline.
+    """
+    # Extract current beliefs of the input nodes
+    expected_mean = jnp.array(
+        [node_trajectories[i]["expected_mean"][-1] for i in input_idxs]
+    )
+    expected_precision = jnp.array(
+        [node_trajectories[i]["expected_precision"][-1] for i in input_idxs]
+    )
+
+    # Baseline dissatisfaction relative to current network preferences
+    baseline_mean = jnp.array(attributes[-1]["preferences"]["mean"])
+    baseline_precision = jnp.array(attributes[-1]["preferences"]["precision"])
+    current_dissatisfaction = jnp.sum(
+        kl_divergence(
+            expected_mean, expected_precision, baseline_mean, baseline_precision
+        )
+    )
+
+    # Function to compute dissatisfaction for a single candidate
+    def candidate_dissatisfaction(candidate):
+        mean_pref, precision_pref = candidate
+        kl = kl_divergence(expected_mean, expected_precision, mean_pref, precision_pref)
+        return current_dissatisfaction - jnp.sum(kl)
+
+    # Vectorized computation over all candidates
+    total_diss = jnp.array([candidate_dissatisfaction(c) for c in candidates])
+    return total_diss
+
+
+def init_preferences(
+    n_agents, n_preferences, manual_means=None, manual_precisions=None
+):
+    """Initialize preferences for agents either manually or randomly.
+
+    Parameters
+    ----------
+    n_agents : int
+        Number of agents for which to initialize preferences.
+    n_preferences : int
+        Number of preferences each agent has.
+    manual_means : np.ndarray, optional
+        Manually specified mean preferences for agents.
+    manual_precisions : np.ndarray, optional
+        Manually specified precision preferences for agents.
+
+    Returns
+    -------
+    dict
+        A dictionary with keys "mean" and "precision".
+    """
+    if manual_means is not None and manual_precisions is not None:
+        manual_means = np.array(manual_means)
+        manual_precisions = np.array(manual_precisions)
+        if manual_means.shape != (n_agents, n_preferences):
+            raise ValueError("manual_means must have shape (n_agents, n_preferences)")
+
+        if manual_precisions.shape != (n_agents, n_preferences):
+            raise ValueError(
+                "manual_precisions must have shape (n_agents, n_preferences)"
+            )
+
+        all_mus, all_pis = manual_means, manual_precisions
+    else:
+        all_mus, all_pis = [], []
+        for _ in range(n_agents):
+            # Generate means and precisions randomly
+            mus = norm.rvs(4, 1, size=n_preferences)
+            pis = halfnorm.rvs(loc=0, scale=0.5, size=n_preferences)
+            all_mus.append(mus)
+            all_pis.append(pis)
+        all_mus = np.array(all_mus)
+        all_pis = np.array(all_pis)
+
+    return {"mean": all_mus, "precision": all_pis}
