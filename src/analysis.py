@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
-from scipy.stats import gaussian_kde, norm
+from scipy.stats import norm
 
 from agents import Voter
 
@@ -15,39 +15,40 @@ if TYPE_CHECKING:
 
 
 class DataCollector:
-    """Collects and stores data from the simulation.
-
-    This class is responsible for recording the state of the simulation at
-    each step and providing methods to export the collected data into
-    structured pandas DataFrames for analysis.
-
-    Attributes
-    ----------
-    records : list[dict]
-        A list of dictionaries, where each dictionary holds the collected
-        data for a single simulation step.
-    """
+    """Collects and stores data from the simulation."""
 
     def __init__(self):
+        """Initialize the DataCollector with an empty list for records."""
         self.records = []
 
     def _process_round_results(
         self, results: Dict[int, float], round_num: int
     ) -> Dict[str, Any]:
-        """Process scores and proportions for a single round."""
+        """Process scores and proportions for a single round.
+
+        Parameters
+        ----------
+        results : Dict[int, float]
+            A dictionary mapping candidate IDs to their scores.
+        round_num : int
+            The round number to which the results apply.
+
+        Returns
+        -------
+        Dict[str, Any]
+            A dictionary with processed scores and proportions, ready to be
+            added to the main step record.
+        """
         if not results:
             return {}
 
         processed_data = {}
-        # Add raw scores
         processed_data.update(
             {
                 f"candidate_{cid}_score_r{round_num}": score
                 for cid, score in results.items()
             }
         )
-
-        # Calculate and add proportions
         total_score = sum(results.values())
         if total_score > 0:
             processed_data.update(
@@ -56,18 +57,22 @@ class DataCollector:
                     for cid, score in results.items()
                 }
             )
-
         return processed_data
 
     def collect(self, environment: "Environment") -> None:
-        """Record the state of the model, including separate round results."""
+        """Record the state of the model.
+
+        Parameters
+        ----------
+        environment : Environment
+            The simulation environment instance from which to collect data.
+        """
         step_info = {
             "step": environment.scheduler.step_count,
             "winner_id": environment.winner_id,
             "voting_system": environment.voting_system.name,
         }
 
-        # Add a check for None before calling the helper method
         if environment.last_round1_results is not None:
             step_info.update(
                 self._process_round_results(environment.last_round1_results, 1)
@@ -77,24 +82,56 @@ class DataCollector:
                 self._process_round_results(environment.last_round2_results, 2)
             )
 
+        # Create a dictionary to store each agent's vote at this step
+        individual_votes: dict[str, str | int | None] = {
+            f"voter_{v.id}_vote": (
+                ",".join(map(str, v.last_vote))
+                if isinstance(v.last_vote, list)
+                else v.last_vote
+            )
+            for v in environment.voters
+        }
+        step_info.update(individual_votes)
+
         self.records.append(step_info)
 
     def get_dataframe(self) -> pd.DataFrame:
-        """Export collected data to a wide-format pandas DataFrame."""
+        """Export collected data to a wide-format pandas DataFrame.
+
+        Returns
+        -------
+        pd.DataFrame
+            A DataFrame where each row is a simulation step and columns
+            represent different collected metrics.
+        """
         return pd.DataFrame(self.records).fillna(0)
 
     def get_long_dataframe(self) -> pd.DataFrame:
-        """Export data to a long-format DataFrame."""
+        """Export data to a long-format DataFrame.
+
+        Returns
+        -------
+        pd.DataFrame
+            A long-format DataFrame with columns for step, winner, candidate,
+            round, score, and proportion.
+        """
         wide_df = self.get_dataframe()
         if wide_df.empty:
             return pd.DataFrame()
 
         id_vars = ["step", "winner_id", "voting_system"]
-        score_cols = [col for col in wide_df.columns if "_score_r" in col]
-        prop_cols = [col for col in wide_df.columns if "_prop_r" in col]
+        # Exclude the new individual vote columns from the melt operation
+        value_vars_all = [
+            c
+            for c in wide_df.columns
+            if c not in id_vars and not c.startswith("voter_")
+        ]
+
+        score_cols = [col for col in value_vars_all if "_score_r" in col]
+        prop_cols = [col for col in value_vars_all if "_prop_r" in col]
 
         if not score_cols:
-            return wide_df[id_vars]
+            return wide_df  # Return the wide DF with votes if no scores are present
 
         # Melt scores
         scores_long = wide_df.melt(
@@ -115,7 +152,7 @@ class DataCollector:
         props_long["candidate_id"] = pd.to_numeric(prop_extract[0])
         props_long["round"] = pd.to_numeric(prop_extract[1])
 
-        # Merge the two long dataframes for robustness
+        # Merge
         merge_cols = id_vars + ["candidate_id", "round"]
         final_df = pd.merge(
             scores_long[merge_cols + ["score"]],
@@ -170,7 +207,18 @@ class SimulationVisualizer:
         )
 
     def _prepare_preference_df(self, num_voters_to_show: int) -> pd.DataFrame:
-        """Prepare the DataFrame for preference distribution plotting."""
+        """Prepare the DataFrame for preference distribution plotting.
+
+        Parameters
+        ----------
+        num_voters_to_show : int
+            The number of individual voter distributions to include in the data.
+
+        Returns
+        -------
+        pd.DataFrame
+            A DataFrame formatted for plotting preference distributions.
+        """
         voters = self.env.voters
         candidates = self.env.candidates
         n_preferences = self.env.num_preferences
@@ -222,9 +270,18 @@ class SimulationVisualizer:
     ) -> Optional[Tuple[plt.Figure, np.ndarray]]:
         """Visualizes preference distributions and returns the plot objects.
 
-        Args:
-            num_voters_to_show (int): Individual voter distributions to show.
-            axes (Optional[np.ndarray]): An array of matplotlib axes to plot on.
+        Parameters
+        ----------
+        num_voters_to_show : int, optional
+            The number of individual voter distributions to show (default is 10).
+        axes : Optional[np.ndarray], optional
+            An array of matplotlib axes to plot on. If None, new axes are created.
+
+        Returns
+        -------
+        Optional[Tuple[plt.Figure, np.ndarray]]
+            A tuple containing the matplotlib Figure and axes array, or None if
+            plotting is not possible.
         """
         df = self._prepare_preference_df(num_voters_to_show)
         if df.empty:
@@ -302,6 +359,12 @@ class SimulationVisualizer:
         axes : Optional[Tuple[plt.Axes, plt.Axes]], optional
             A tuple of (ax_main, ax_density) to plot on. If None, a new
             figure and axes will be created.
+
+        Returns
+        -------
+        Optional[Tuple[plt.Figure, plt.Axes, plt.Axes]]
+            A tuple containing the Figure and two axes (main and density), or
+            None if plotting is not possible.
         """
         if not hasattr(voter, "traj") or not voter.traj:
             print(f"Voter {voter.id} has no trajectory data to plot.")
@@ -327,7 +390,6 @@ class SimulationVisualizer:
             ax_main, ax_density = axes
             fig = ax_main.get_figure()
 
-        # --- Plotting logic (remains unchanged) ---
         ax_main.scatter(
             range(len(observations)),
             observations,
@@ -363,29 +425,61 @@ class SimulationVisualizer:
         ax_main.set_ylabel("Preference Value")
         ax_main.legend()
         ax_main.grid(True, linestyle="--", alpha=0.6)
+        voter.preferences
 
-        kde = gaussian_kde(observations)
-        y_grid = np.linspace(*ax_main.get_ylim(), 500)
-        pdf_values = kde(y_grid)
-        ax_density.fill_betweenx(
-            y_grid, pdf_values, color="lightgrey", alpha=0.8, edgecolor="grey"
+        # --- Horizontal density plot ---
+        mean_preference = voter.preferences["mean"][0]
+        precision_preference = voter.preferences["precision"][0]
+
+        # Calculate the PDF of the voter's preference
+        y_vals = np.linspace(-3, 4, 400)
+        y_min = y_vals.min()
+        y_max = y_vals.max()
+        y_vals_normalized = (y_vals - y_min) / (y_max - y_min)
+
+        pdf = norm.pdf(
+            y_vals,
+            loc=mean_preference,
+            scale=1 / np.sqrt(precision_preference),
         )
+        # Normalize PDF for plotting aesthetics
+        pdf = pdf / np.max(pdf)
+
+        # Plot the horizontal density
+        ax_density.fill_betweenx(
+            y=y_vals_normalized,  # Use original y-values for correct positioning
+            x1=0,  # Start from x=0
+            x2=pdf,  # Density values on the x-axis
+            color="lightgrey",
+            alpha=0.8,
+            edgecolor="grey",
+        )
+
+        # Configure axes
         ax_density.set_xlabel("Density")
-        ax_density.tick_params(axis="y", which="both", left=False, labelleft=False)
-
+        ax_density.tick_params(axis="y", labelleft=False)  # Hide y-axis labels
         plt.tight_layout()
-
         return fig, ax_main, ax_density
 
     def plot_simulation_results_distribution(
         self, plot_kind: str = "histogram", axes: Optional[np.ndarray] = None
-    ) -> Optional[tuple[plt.Figure, np.ndarray]]:
+    ) -> Optional[Tuple[plt.Figure, np.ndarray]]:
         """Visualize the distribution of vote proportions for each round.
 
-        Args:
-            plot_kind (str): The kind of plot to generate.
-            axes (Optional[np.ndarray]): A numpy array of matplotlib axes to plot on.
-                                        If None, new figure and axes will be created.
+        Parameters
+        ----------
+        plot_kind : str, optional
+            The kind of plot to generate, either 'histogram' or 'stripplot'
+            (default is 'histogram').
+        axes : Optional[np.ndarray], optional
+            A numpy array of matplotlib axes to plot on. If None, new figure
+            and axes will be created.
+
+        Returns
+        -------
+        Optional[Tuple[plt.Figure, np.ndarray]]
+            A tuple containing the matplotlib Figure and axes array, or None if
+            plotting is not possible.
         """
         results_df = self.collector.get_long_dataframe()
 
@@ -396,16 +490,15 @@ class SimulationVisualizer:
         n_sims = results_df["step"].nunique()
 
         # --- Figure creation logic ---
-        # If no axes are provided, create a new figure and axes.
         if axes is None:
+            # If no axes are provided, create a new figure and axes.
             fig, axes = plt.subplots(1, 2, figsize=(18, 7), sharey=True)
             # Only add the main title if we are creating the figure here.
             fig.suptitle(
                 f"Distribution of Vote Proportions Across {n_sims} Steps", fontsize=16
             )
-        # If axes are provided, simply get the parent figure.
         else:
-            # Assume 'axes' is an array (e.g., from subplots).
+            # If axes are provided, simply get the parent figure.
             fig = axes[0].get_figure()
 
         all_candidate_ids = sorted(results_df["candidate_id"].unique())
@@ -415,8 +508,8 @@ class SimulationVisualizer:
         df_r1 = results_df[results_df["round"] == 1]
         df_r2 = results_df[results_df["round"] == 2]
 
-        # The inner function remains unchanged.
         def _plot_single_round(ax, data, round_num, color_map, plot_kind) -> None:
+            """Plot results for a single round."""
             ax.set_title(f"Round {round_num} Results")
             if data.empty:
                 ax.text(0.5, 0.5, "No data for this round", ha="center", va="center")
@@ -439,7 +532,7 @@ class SimulationVisualizer:
                 ax.set_ylabel("Density")
                 ax.legend(frameon=True, title="Candidate ID")
                 ax.set_xlim(0, 1)
-                ax.set_ylim(bottom=0, top=400)
+                ax.set_ylim(bottom=0, top=400)  # Optional: set a fixed upper limit
             else:
                 sns.stripplot(
                     data=data,

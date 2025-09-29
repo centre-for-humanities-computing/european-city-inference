@@ -12,7 +12,7 @@ class VotingSystem(ABC):
 
     Notes
     -----
-    This is an abstract base class (ABC) that defines the essential methods
+    An abstract base class (ABC) that defines the essential methods
     and properties any concrete voting system must implement.
     """
 
@@ -28,7 +28,7 @@ class VotingSystem(ABC):
     ) -> Tuple[int, Dict[Any, Any]]:
         """Count votes and determine the winning candidate.
 
-        This method must also store the detailed results of the count in an
+        Store the detailed results of the count in an
         internal attribute for later inspection.
 
         Parameters
@@ -60,16 +60,25 @@ class PluralityVoting(VotingSystem):
     Notes
     -----
     The rule is simple: the candidate with the most first-preference votes wins.
-    This is also known as "first-past-the-post".
     """
 
-    def __init__(self):
-        """Initialize the PluralityVoting system."""
+    def __init__(self, use_theory_of_mind: bool = False):
+        """Initialize the PluralityVoting system.
+
+        Parameters
+        ----------
+        use_theory_of_mind : bool, optional
+            If True, enables Theory of Mind modifications to the system's
+            behavior and name (default is False).
+        """
         self.last_results: dict[int, int] = {}
+        self._use_tom = use_theory_of_mind  # Stores the state
 
     @property
     def name(self) -> str:
-        """str: The name of the voting system."""
+        """The name of the system, modified if Theory of Mind is active."""
+        if self._use_tom:
+            return "Plurality Voting (ToM)"
         return "Plurality Voting"
 
     def counting_votes(
@@ -102,7 +111,9 @@ class PluralityVoting(VotingSystem):
             return -1, self.last_results
 
         candidate_ids = [c.id for c in candidates]
-        actual_vote_ids = [candidate_ids[idx] for idx in vote_indices]
+        actual_vote_ids = [
+            candidate_ids[int(idx)] for idx in vote_indices if isinstance(idx, int)
+        ]
 
         self.last_results = {c.id: 0 for c in candidates}
 
@@ -121,7 +132,7 @@ class PluralityVoting(VotingSystem):
 
 
 class RankingVoting(VotingSystem):
-    """A system where voters rank candidates.
+    """A system where voters rank candidates, scored using Borda count.
 
     Attributes
     ----------
@@ -136,136 +147,133 @@ class RankingVoting(VotingSystem):
     gets N-1 points, a second-place rank gets N-2 points, and so on, down to
     0 points for the last-place candidate. The candidate with the highest
     total score wins.
-
-    This implementation uses a pre-computed ranking stored in the `last_vote`
-    attribute of the Voter object.
     """
 
-    def __init__(self):
-        """Initialize the RankingVoting system."""
+    def __init__(self, use_theory_of_mind: bool = False):
+        """Initialize the RankingVoting system.
+
+        Parameters
+        ----------
+        use_theory_of_mind : bool, optional
+            If True, enables Theory of Mind modifications to the system's
+            behavior and name (default is False).
+        """
         self.last_results: dict[int, int] = {}
+        self._use_tom = use_theory_of_mind
 
     @property
     def name(self) -> str:
-        """str: The name of the voting system."""
+        """The name of the system, modified if Theory of Mind is active."""
+        if self._use_tom:
+            return "Ranking Voting (ToM)"
         return "Ranking Voting"
-
-
-def counting_votes(
-    self, voters: list[Voter], candidates: list[Candidate]
-) -> tuple[int, dict[int, int]]:
-    """Calculate the Borda count winner from voter rankings."""
-    # Get the total number of candidates.
-    num_candidates = len(candidates)
-    # Handle the edge case where there are no candidates.
-    if num_candidates == 0:
-        self.last_results = {}
-        return -1, {}
-
-    # Initialize a dictionary to store the score for each candidate, starting at 0.
-    points = {c.id: 0 for c in candidates}
-    # Create an array of Borda points.
-    borda_points = jnp.arange(num_candidates - 1, -1, -1)
-
-    # Iterate through each voter to tabulate their ranked votes.
-    for voter in voters:
-        # Safely get the voter's ranked list of candidate indices.
-        ranked_indices = getattr(voter, "last_vote", None)
-        # Skip voters who have not submitted a valid, iterable vote.
-        if ranked_indices is None or not hasattr(ranked_indices, "__iter__"):
-            continue
-
-        # Award points based on the rank of each candidate in the voter's list.
-        for rank, candidate_idx in enumerate(ranked_indices):
-            # Safety check to ensure the rank.
-            if rank < len(borda_points) and int(candidate_idx) < len(candidates):
-                # Get the candidate's unique ID from their index in the list.
-                candidate_id = candidates[int(candidate_idx)].id
-                # Add the corresponding Borda points to the candidate's total score.
-                points[candidate_id] += borda_points[rank]
-
-    # Convert scores to standard Python integers for compatibility.
-    final_points = {cid: int(score) for cid, score in points.items()}
-    # Store the final scores in the instance variable.
-    self.last_results = final_points
-    # -------------------------
-
-    # If no votes were cast or all scores are zero, return no winner.
-    if not final_points or sum(final_points.values()) == 0:
-        return -1, self.last_results
-
-    # Sort candidates by their final scores in descending order to find the winner.
-    sorted_scores = sorted(final_points.items(), key=lambda item: item[1], reverse=True)
-
-    # Assume no winner by default.
-    winner_id = -1
-    # Check for a tie between the top two candidates.
-    if len(sorted_scores) > 1 and sorted_scores[0][1] == sorted_scores[1][1]:
-        # In case of a tie, winner_id remains -1.
-        pass
-    # If there's a clear winner (and at least one candidate was scored).
-    elif sorted_scores:
-        # The winner is the first candidate in the sorted list.
-        winner_id = sorted_scores[0][0]
-
-    # Return the winner's ID and the dictionary of all final scores.
-    return winner_id, self.last_results
-
-
-class QuadraticVoting(VotingSystem):
-    """A system where voters allocate credits to express preference intensity.
-
-    Attributes
-    ----------
-    VOTE_CREDITS_BUDGET : int
-        The total number of credits each voter can allocate among candidates.
-    last_results : dict[int, float]
-        Stores the quadratic vote totals from the last election, mapping
-        candidate IDs to their final scores.
-
-    Notes
-    -----
-    In Quadratic Voting, each voter has a budget of "vote credits." They can
-    allocate these credits to candidates to show the intensity of their preference.
-    The number of official votes a candidate receives from a voter is the
-    **square root** of the credits allocated.
-
-    This system allows for nuanced preference expression while curbing the
-    influence of overly passionate minorities. This implementation uses a
-    `last_softmax_probs` attribute on the Voter object to determine how the
-    credit budget is distributed.
-    """
-
-    VOTE_CREDITS_BUDGET = 100
-
-    def __init__(self):
-        """Initialize the QuadraticVoting system."""
-        self.last_results: dict[int, float] = {}
-
-    @property
-    def name(self) -> str:
-        """str: The name of the voting system."""
-        return "Quadratic Voting"
 
     def counting_votes(
         self, voters: list[Voter], candidates: list[Candidate]
-    ) -> tuple[int, dict[int, float]]:
-        """Calculate the winner using the Quadratic Voting method.
+    ) -> tuple[int, dict[int, int]]:
+        """Calculate the Borda count winner from voter rankings.
 
         Parameters
         ----------
         voters : list[Voter]
-            A list of Voter objects. Each voter is expected to have a
-            `last_softmax_probs` attribute: a dictionary mapping candidate IDs
-            to a probability-like score (summing to 1.0).
+            A list of voters, where `voter.last_vote` is expected to be an
+            iterable of ranked candidate indices.
         candidates : list[Candidate]
             A list of all candidates in the election.
 
         Returns
         -------
-        int
-            The ID of the winning candidate. Returns -1 if there is a tie for
-            first place or if no credits are allocated.
+        tuple[int, dict[int, int]]
+            A tuple containing:
+            - The ID of the winning candidate (-1 for a tie or no votes).
+            - A dictionary with the final Borda scores for each candidate.
+        """
+        num_candidates = len(candidates)
+        if num_candidates == 0:
+            self.last_results = {}
+            return -1, {}
+
+        # Initialize scores for each candidate to 0.
+        points = {c.id: 0 for c in candidates}
+        borda_points = jnp.arange(num_candidates - 1, -1, -1)
+
+        # Iterate through each voter to tabulate their ranked votes.
+        for voter in voters:
+            ranked_indices = getattr(voter, "last_vote", None)
+            if ranked_indices is None or not hasattr(ranked_indices, "__iter__"):
+                continue
+
+            # Award points based on the rank of each candidate.
+            for rank, candidate_idx in enumerate(ranked_indices):
+                if rank < len(borda_points) and int(candidate_idx) < len(candidates):
+                    candidate_id = candidates[int(candidate_idx)].id
+                    points[candidate_id] += borda_points[rank]
+
+        self.last_results = {cid: int(score) for cid, score in points.items()}
+
+        if not self.last_results or sum(self.last_results.values()) == 0:
+            return -1, self.last_results
+
+        # Sort candidates by score to find the winner.
+        sorted_scores = sorted(
+            self.last_results.items(), key=lambda item: item[1], reverse=True
+        )
+
+        # Check for a tie between the top two candidates.
+        if len(sorted_scores) > 1 and sorted_scores[0][1] == sorted_scores[1][1]:
+            return -1, self.last_results  # Tie
+
+        winner_id = sorted_scores[0][0]
+        return winner_id, self.last_results
+
+
+class QuadraticVoting(VotingSystem):
+    """Votes are summed from voters' quadratic allocations.
+
+    Attributes
+    ----------
+    last_results : dict[int, float]
+        Stores the summed quadratic vote totals from the last election.
+    """
+
+    def __init__(self, use_theory_of_mind: bool = False):
+        """Initialize the QuadraticVoting system.
+
+        Parameters
+        ----------
+        use_theory_of_mind : bool, optional
+            If True, enables Theory of Mind modifications to the system's
+            behavior and name (default is False).
+        """
+        self.last_results: dict[int, float] = {}
+        self._use_tom = use_theory_of_mind
+
+    @property
+    def name(self) -> str:
+        """The name of the system, modified if Theory of Mind is active."""
+        if self._use_tom:
+            return "Quadratic Voting (ToM)"
+        return "Quadratic Voting"
+
+    def counting_votes(
+        self, voters: list[Voter], candidates: list[Candidate]
+    ) -> tuple[int, dict[int, float]]:
+        """Count votes based on summing each voter's quadratic allocations.
+
+        Parameters
+        ----------
+        voters : list[Voter]
+            Voters, where `voter.last_vote` is an array of votes allocated
+            to candidates.
+        candidates : list[Candidate]
+            A list of all candidates in the election.
+
+        Returns
+        -------
+        tuple[int, dict[int, float]]
+            A tuple containing:
+            - The ID of the winning candidate (-1 for a tie or no votes).
+            - A dictionary with the final summed votes for each candidate.
         """
         if not candidates:
             self.last_results = {}
@@ -274,35 +282,91 @@ class QuadraticVoting(VotingSystem):
         total_quadratic_votes = {c.id: 0.0 for c in candidates}
 
         for voter in voters:
-            probabilities_by_index = getattr(voter, "last_softmax_probs", None)
-            if not isinstance(probabilities_by_index, dict):
+            # Assumes voter.last_vote contains the array of quadratic votes.
+            votes_by_index = getattr(voter, "last_vote", None)
+            if votes_by_index is None or not hasattr(votes_by_index, "__iter__"):
                 continue
 
-            # **CORRECTION : Mapper l'index de la probabilité à l'ID du candidat**
-            for candidate_idx, prob in probabilities_by_index.items():
+            for candidate_idx, num_votes in enumerate(votes_by_index):
                 if candidate_idx < len(candidates):
-                    # Récupérer le vrai ID du candidat
                     candidate_id = candidates[candidate_idx].id
-                    credits_allocated = prob * self.VOTE_CREDITS_BUDGET
-                    quadratic_votes = jnp.sqrt(credits_allocated)
-                    total_quadratic_votes[candidate_id] += float(quadratic_votes)
+                    total_quadratic_votes[candidate_id] += float(num_votes)
 
         self.last_results = total_quadratic_votes
-        if sum(total_quadratic_votes.values()) == 0:
+        if sum(self.last_results.values()) == 0:
             return -1, self.last_results
 
-        # Trouver le gagnant (logique similaire à ci-dessus)
         sorted_scores = sorted(
-            total_quadratic_votes.items(), key=lambda item: item[1], reverse=True
+            self.last_results.items(), key=lambda item: item[1], reverse=True
         )
+        if not sorted_scores:
+            return -1, self.last_results
+        # Tie check for floating-point numbers
+        if (
+            len(sorted_scores) > 1
+            and abs(sorted_scores[0][1] - sorted_scores[1][1]) < 1e-9
+        ):
+            return -1, self.last_results
 
+        winner_id = sorted_scores[0][0]
+        return winner_id, self.last_results
+
+
+class QuadraticVotingBudget(VotingSystem):
+    """A system where votes are summed from voters' budget-constrained.
+
+    Attributes
+    ----------
+    last_results : dict[int, float]
+        Stores the summed quadratic vote totals from the last election.
+    """
+
+    def __init__(self, use_theory_of_mind: bool = False):
+        self.last_results: dict[int, float] = {}
+        self._use_tom = use_theory_of_mind
+
+    @property
+    def name(self) -> str:
+        """The name of the system."""
+        if self._use_tom:
+            return "Quadratic Voting (Budget ToM)"
+        return "Quadratic Voting (Budget)"
+
+    def counting_votes(
+        self, voters: list[Voter], candidates: list[Candidate]
+    ) -> tuple[int, dict[int, float]]:
+        """QuadraticVoting counting method."""
+        if not candidates:
+            self.last_results = {}
+            return -1, self.last_results
+
+        total_quadratic_votes = {c.id: 0.0 for c in candidates}
+
+        for voter in voters:
+            votes_by_index = getattr(voter, "last_vote", None)
+            if votes_by_index is None or not hasattr(votes_by_index, "__iter__"):
+                continue
+
+            for candidate_idx, num_votes in enumerate(votes_by_index):
+                if candidate_idx < len(candidates):
+                    candidate_id = candidates[candidate_idx].id
+                    total_quadratic_votes[candidate_id] += float(num_votes)
+
+        self.last_results = total_quadratic_votes
+        if sum(self.last_results.values()) == 0:
+            return -1, self.last_results
+
+        sorted_scores = sorted(
+            self.last_results.items(), key=lambda item: item[1], reverse=True
+        )
         if not sorted_scores:
             return -1, self.last_results
 
-        if len(sorted_scores) > 1 and sorted_scores[0][1] == sorted_scores[1][1]:
+        if (
+            len(sorted_scores) > 1
+            and abs(sorted_scores[0][1] - sorted_scores[1][1]) < 1e-9
+        ):
             return -1, self.last_results
 
-        # Get the winner ID from the sorted list
         winner_id = sorted_scores[0][0]
-        # Return the ID and the results dictionary as a tuple
         return winner_id, self.last_results

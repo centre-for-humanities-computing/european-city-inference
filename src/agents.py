@@ -1,8 +1,10 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional, Union
 
 import numpy as np
+
+from environment import Environment
 
 
 @dataclass
@@ -21,7 +23,7 @@ class Agent(ABC):
     id: int
 
     @abstractmethod
-    def step(self, environment: Any) -> None:
+    def step(self, env: "Environment") -> None:
         """Define the agent's action during a single simulation step.
 
         This method must be implemented by all subclasses. It contains the
@@ -67,19 +69,25 @@ class Voter(Agent):
     # Initialization
     preferences: Dict[str, Any]
     tonic_volatility: float
-
+    budget: float = 100.0
     # Attribute for Theory of Mind
     perceived_outcome: Optional[np.ndarray] = None
 
     # State attributes (with default values, not needed at initialization)
-    last_vote: Optional[int] = None
+    last_vote: Optional[Union[int, np.ndarray, List[int]]] = None
     last_softmax_probs: Optional[Dict[int, float]] = field(default_factory=dict)
     last_dissatisfactions: Optional[Dict[int, float]] = field(default_factory=dict)
     traj: Optional[Any] = None
     observation: Optional[Any] = None
 
-    def step(self, environment: Any) -> None:
+    def step(self, env: "Environment") -> None:
         """Perform the voter's action for a step.
+
+        Parameters
+        ----------
+        environment : Any
+            The environment in which the agent exists, providing access to
+            candidate policies and other relevant information.
 
         Notes
         -----
@@ -115,8 +123,14 @@ class Candidate(Agent):
     # State attribute with a default value
     vote_count: int = 0
 
-    def step(self, environment: Any) -> None:
+    def step(self, env: "Environment") -> None:
         """Perform the candidate's action for a step.
+
+        Parameters
+        ----------
+        environment : Any
+            The environment in which the agent exists, providing access to
+            global state, voter data, and other agents.
 
         Notes
         -----

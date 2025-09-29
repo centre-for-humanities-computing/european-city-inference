@@ -66,8 +66,9 @@ def get_votes(
     input_idxs: tuple,
     candidates: list,
     mask: ArrayLike,
-    voting_system: str = "basic",  # "basic", "ranked", "quadratic"
-    average_proportions_vector=None,  # only for "basic (ToM)"
+    voting_system: str = "Plurality Voting",
+    average_proportions_vector=None,
+    budget: float = 100.0,
 ) -> ArrayLike:
     """Get votes based on network attributes and input data.
 
@@ -89,17 +90,24 @@ def get_votes(
         Boolean mask of valid candidates.
     voting_system : str, optional
         Voting system to use:
-        - "basic" (default): softmax sampling of a single candidate.
-        - "ranked": full ranking of candidates (descending preference).
-        - "quadratic": quadratic vote allocation based on preference strength.
+        - "Plurality Voting" (default): softmax sampling of a single candidate.
+        - "Ranked Voting": full ranking of candidates (descending preference).
+        - "Quadratic Voting": quadratic vote allocation based on preference strength.
+        - "Plurality Voting (ToM)": basic voting with Theory of Mind weights.
+        - "Ranking Voting (ToM)": ranked voting with Theory of Mind weights.
+        - "Quadratic Voting (ToM)": quadratic voting with Theory of Mind weights.
+    average_proportions_vector : Array, optional
+        Weights for candidate probabilities in "ToM" voting systems.
+    budget : float, optional
+        Budget for quadratic voting (default is 100.0).
 
     Returns
     -------
     Array
         The voting outcome, depending on the voting system:
-        - "basic": index of the chosen candidate (int).
-        - "ranked": ranking array of candidate indices (e.g., [2, 0, 1]).
-        - "quadratic": array of quadratic vote allocations per candidate.
+        - "Plurality Voting": index of the chosen candidate (int).
+        - "Ranked Voting": ranking array of candidate indices (e.g., [2, 0, 1]).
+        - "Quadratic Voting": array of quadratic vote allocations per candidate.
     """
     # Extract indices of continuous nodes matching preferences
     preferences_idx = [edges[idx].value_parents[0] for idx in input_idxs]
@@ -140,14 +148,14 @@ def get_votes(
     candidate_preferences = jnp.array(candidate_preferences)
 
     # Voting system switch ----
-    # Basic voting: softmax sampling of a single candidate
+    # Plurality voting: softmax sampling of a single candidate
     if voting_system == "Plurality Voting":
         masked_preferences = jnp.where(mask, candidate_preferences, -jnp.inf)
         softmax_probs = jax.nn.softmax(masked_preferences)
         vote = jax.random.categorical(key, jnp.log(softmax_probs))
         return vote, softmax_probs, node_trajectories
 
-    # Basic voting with Theory of Mind: softmax sampling with weights
+    # Plurality voting with Theory of Mind: softmax sampling with weights
     elif voting_system == "Plurality Voting (ToM)":
         if average_proportions_vector is None:
             raise ValueError(
@@ -158,22 +166,129 @@ def get_votes(
         vote = jax.random.categorical(key, jnp.log(softmax_probs))
         return vote, softmax_probs, node_trajectories
 
-    # Ranked voting: full ranking of candidates
     elif voting_system == "Ranking Voting":
         masked_preferences = jnp.where(mask, candidate_preferences, -jnp.inf)
         available = masked_preferences.copy()
         ranking = []
+        loop_key = key
         for _ in range(masked_preferences.shape[0]):
             softmax_probs = jax.nn.softmax(available)
-            choice = jax.random.categorical(key, jnp.log(softmax_probs))
+            loop_key, subkey = jax.random.split(loop_key)
+            choice = jax.random.categorical(subkey, jnp.log(softmax_probs))
             ranking.append(choice)
             available = available.at[choice].set(-jnp.inf)
         ranking = jnp.array(ranking)
         return ranking, softmax_probs, node_trajectories
 
+    # Ranked voting with Theory of Mind
+    elif voting_system == "Ranking Voting (ToM)":
+        if average_proportions_vector is None:
+            raise ValueError("average_proportions_vector is required for ToM.")
+        masked_preferences = jnp.where(mask, candidate_preferences, -jnp.inf)
+        weighted_preferences = masked_preferences * average_proportions_vector
+        available = weighted_preferences.copy()
+        ranking = []
+        loop_key = key
+        for _ in range(masked_preferences.shape[0]):
+            softmax_probs = jax.nn.softmax(available)
+            loop_key, subkey = jax.random.split(loop_key)
+            choice = jax.random.categorical(subkey, jnp.log(softmax_probs))
+            ranking.append(choice)
+            available = available.at[choice].set(-jnp.inf)
+        ranking = jnp.array(ranking)
+        return ranking, softmax_probs, node_trajectories
+
+    elif voting_system == "Quadratic Voting (Budget)":
+        masked_preferences = jnp.where(mask, candidate_preferences, 0.0)
+        sorted_idx = jnp.argsort(masked_preferences)[::-1]
+        allocations = jnp.zeros_like(masked_preferences)
+        n_valid = jnp.sum(mask)
+
+        # Assign 0.6 of the budget to the top candidate (if any)
+        def assign_top(allocs):
+            return allocs.at[sorted_idx[0]].set(0.6)
+
+        allocations = jax.lax.cond(n_valid >= 1, assign_top, lambda x: x, allocations)
+
+        # Assign 0.3 of the budget to the second candidate (if any)
+        def assign_second(allocs):
+            return allocs.at[sorted_idx[1]].set(0.3)
+
+        allocations = jax.lax.cond(
+            n_valid >= 2, assign_second, lambda x: x, allocations
+        )
+
+        # Assign 0.1 of the budget to the least preferred candidate (if at least 3)
+        def assign_least(allocs):
+            return allocs.at[sorted_idx[-1]].set(0.1)
+
+        allocations = jax.lax.cond(n_valid >= 3, assign_least, lambda x: x, allocations)
+        # Convert allocations into actual credits and quadratic votes
+        credits_spent = allocations * budget
+        quadratic_votes = jnp.sqrt(credits_spent)
+        proportions = allocations
+        return quadratic_votes, proportions, node_trajectories
+
+    elif voting_system == "Quadratic Voting (Budget ToM)":
+        if average_proportions_vector is None:
+            raise ValueError("average_proportions_vector is required for ToM.")
+
+        # Mask and weight preferences
+        masked_preferences = jnp.where(mask, candidate_preferences, 0.0)
+        weighted_preferences = masked_preferences * average_proportions_vector
+
+        # Sort candidates by weighted preference
+        sorted_idx = jnp.argsort(weighted_preferences)[::-1]
+        allocations = jnp.zeros_like(weighted_preferences)
+        n_valid = jnp.sum(mask)
+
+        # Assign 0.6 of the budget to the top candidate (if any)
+        def assign_top(allocs):
+            return allocs.at[sorted_idx[0]].set(0.6)
+
+        allocations = jax.lax.cond(n_valid >= 1, assign_top, lambda x: x, allocations)
+
+        # Assign 0.3 of the budget to the second candidate (if any)
+        def assign_second(allocs):
+            return allocs.at[sorted_idx[1]].set(0.3)
+
+        allocations = jax.lax.cond(
+            n_valid >= 2, assign_second, lambda x: x, allocations
+        )
+
+        # Assign 0.1 of the budget to the least preferred candidate (if at least 3)
+        def assign_least(allocs):
+            return allocs.at[sorted_idx[-1]].set(0.1)
+
+        allocations = jax.lax.cond(n_valid >= 3, assign_least, lambda x: x, allocations)
+
+        # Convert allocations into actual credits and quadratic votes
+        credits_spent = allocations * budget
+        quadratic_votes = jnp.sqrt(credits_spent)
+
+        proportions = allocations
+        return quadratic_votes, proportions, node_trajectories
+
     # Quadratic voting: quadratic vote allocation based on preference strength
     elif voting_system == "Quadratic Voting":
-        return None
+        masked_preferences = jnp.where(mask, candidate_preferences, 0.0)
+        positive_preferences = jnp.maximum(masked_preferences, 0.0)
+        quadratic_votes = jnp.sqrt(positive_preferences)
+        total_votes = jnp.sum(quadratic_votes)
+        proportions = jnp.nan_to_num(quadratic_votes / total_votes)
+        return quadratic_votes, proportions, node_trajectories
+
+    # Quadratic voting with Theory of Mind
+    elif voting_system == "Quadratic Voting (ToM)":
+        if average_proportions_vector is None:
+            raise ValueError("average_proportions_vector is required for ToM.")
+        masked_preferences = jnp.where(mask, candidate_preferences, 0.0)
+        weighted_preferences = masked_preferences * average_proportions_vector
+        positive_preferences = jnp.maximum(weighted_preferences, 0.0)
+        quadratic_votes = jnp.sqrt(positive_preferences)
+        total_votes = jnp.sum(quadratic_votes)
+        proportions = jnp.nan_to_num(quadratic_votes / total_votes)
+        return quadratic_votes, proportions, node_trajectories
 
     else:
         raise ValueError(f"Unknown voting system: {voting_system}")
@@ -191,7 +306,8 @@ def individual_vote(
     input_data,
     mask,
     voting_system,
-    average_proportions_vector=None,  # Only for "basic (ToM)"
+    average_proportions_vector=None,
+    budget: float = 100.0,
 ):
     """Generate individual votes, preferences, and input data.
 
@@ -263,6 +379,7 @@ def individual_vote(
         mask,
         voting_system,
         average_proportions_vector=average_proportions_vector,
+        budget=budget,
     )
 
     # Compute dissatisfaction per candidate for this agent

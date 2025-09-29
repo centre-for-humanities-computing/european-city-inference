@@ -4,3 +4,9 @@ __pycache__/
 .ipynb_checkpoints
 # MyST build outputs
 _build
+src/fig/distribution.png
+src/fig/Plurality Voting_simulation_results_distribution.png
+src/fig/Plurality Voting_simulation_results_histogram.png
+src/fig/Quadratic Voting (Budget)_simulation_results_distribution.png
+src/fig/Quadratic Voting (Budget)_simulation_results_histogram.png
+src/fig/voter_belief_trajectory.png

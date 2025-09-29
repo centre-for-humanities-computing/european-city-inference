@@ -126,7 +126,6 @@ class Environment:
         self.winner_id: Optional[int] = None
         self.last_round1_results: Optional[Dict[Any, Any]] = None
         self.last_round2_results: Optional[Dict[Any, Any]] = None
-
         # Starts as a uniform distribution (no prior knowledge)
         self.public_poll = jnp.ones(self.num_candidates) / self.num_candidates
 
@@ -146,7 +145,9 @@ class Environment:
             (c.policy["mean"], c.policy["precision"]) for c in self.candidates
         ]
 
-        def get_votes_fn(mus, pis, tonic_volatility, key, mask, perceived_outcome):
+        def get_votes_fn(
+            mus, pis, tonic_volatility, key, mask, perceived_outcome, budget
+        ):
             return individual_vote(
                 mus=mus,
                 pis=pis,
@@ -159,9 +160,10 @@ class Environment:
                 mask=mask,  # The mask is now a dynamic argument
                 voting_system=voting_system.name,
                 average_proportions_vector=perceived_outcome,
+                budget=budget,
             )
 
-        self.vmap_get_votes_fn = vmap(get_votes_fn, in_axes=(0, 0, 0, 0, None, 0))
+        self.vmap_get_votes_fn = vmap(get_votes_fn, in_axes=(0, 0, 0, 0, None, 0, 0))  #
 
         # self.vmap_get_votes_fn = vmap(get_votes_fn)
         print("Compilation complete.")
@@ -200,8 +202,12 @@ class Environment:
         """Create Voters with random preferences in a vectorized way."""
         for _ in range(num_voters):
             self.key, subkey1, subkey2 = jax.random.split(self.key, 3)
-            mean = jax.random.uniform(subkey1, shape=(self.num_preferences,))
-            precision = jax.random.uniform(subkey2, shape=(self.num_preferences,)) + 1.0
+            mean = jax.random.uniform(
+                subkey1, shape=(self.num_preferences,), minval=0, maxval=2.0
+            )
+            precision = jax.random.uniform(
+                subkey2, shape=(self.num_preferences,), minval=0.4, maxval=1.0
+            )
             preferences = {"mean": mean, "precision": precision}
             tonic_volatility = np.random.normal(-3.0, 1.0)
             voter = Voter(
@@ -215,9 +221,11 @@ class Environment:
         """Create Candidates with random policy platforms."""
         for _ in range(num_candidates):
             self.key, subkey1, subkey2 = jax.random.split(self.key, 3)
-            mean = jax.random.uniform(subkey1, shape=(self.num_preferences,))
-            precision = (
-                jax.random.uniform(subkey2, shape=(self.num_preferences,)) * 5.0 + 1.0
+            mean = jax.random.uniform(
+                subkey1, shape=(self.num_preferences,), minval=0, maxval=2.0
+            )
+            precision = jax.random.uniform(
+                subkey2, shape=(self.num_preferences,), minval=0.3, maxval=1.0
             )
             policy_data = {"mean": mean, "precision": precision}  # Renamed for clarity
             candidate = Candidate(
@@ -226,12 +234,18 @@ class Environment:
             )
             self.candidates.append(candidate)
 
+    def _check_preference_diversity(self):
+        means = jax.numpy.stack([voter.preferences["mean"] for voter in self.voters])
+        distances = jax.numpy.mean(jax.numpy.std(means, axis=0))
+        return distances > 0.5  # Seuil arbitraire, à ajuster
+
     def _gather_agent_data(self) -> tuple:
         """Gathers data from all Voter objects into JAX arrays."""
         all_mus = jnp.array([v.preferences["mean"] for v in self.voters])
         all_pis = jnp.array([v.preferences["precision"] for v in self.voters])
         all_volatilities = jnp.array([v.tonic_volatility for v in self.voters])
-        return all_mus, all_pis, all_volatilities
+        all_budgets = jnp.array([v.budget for v in self.voters])  # <-- ADD THIS LINE
+        return all_mus, all_pis, all_volatilities, all_budgets  # <-- RETURN IT
 
     def _scatter_results(self, results: tuple) -> None:
         """Distributes results from the vectorized computation.
@@ -243,16 +257,23 @@ class Environment:
             votes, probabilities, dissatisfactions, and trajectories.
         """
         votes, softmax_probs, dissatisfactions, node_trajectories = results
-        is_ranking_vote = self.voting_system.name == "Ranking Voting"
+
+        # Get the voting system name for conditional logic
+        system_name = self.voting_system.name
+
         for i, voter in enumerate(self.voters):
-            voter.last_vote = votes[i] if is_ranking_vote else int(votes[i])
+            if "Ranking" in system_name or "Quadratic" in system_name:
+                voter.last_vote = votes[i]
+            else:
+                voter.last_vote = int(votes[i])
+
             voter.last_softmax_probs = {
                 cid: prob for cid, prob in enumerate(softmax_probs[i])
             }
             voter.last_dissatisfactions = {
                 cid: diss for cid, diss in enumerate(dissatisfactions[i])
             }
-            voter.traj = node_trajectories  # Store trajectories
+            voter.traj = node_trajectories
 
     def _distribute_poll_to_voters(self) -> None:
         """Update the `perceived_outcome` attribute on each Voter object.
@@ -277,7 +298,9 @@ class Environment:
 
     def _run_single_round_election(self) -> None:
         """Execute a standard, single-round election."""
-        all_mus, all_pis, all_volatilities = self._gather_agent_data()
+        all_mus, all_pis, all_volatilities, all_budgets = (
+            self._gather_agent_data()
+        )  # <-- GET BUDGETS
         self.key, *agent_keys = jax.random.split(self.key, len(self.voters) + 1)
 
         # Prepare the ToM data to be passed to the JAX function
@@ -293,6 +316,7 @@ class Environment:
             jnp.array(agent_keys),
             mask,
             perceived_outcomes,
+            all_budgets,
         )
 
         self._scatter_results(results)
@@ -310,11 +334,12 @@ class Environment:
 
     def _run_two_round_election(self) -> None:
         """Execute a two-round election process."""
-        all_mus, all_pis, all_volatilities = self._gather_agent_data()
+        all_mus, all_pis, all_volatilities, all_budgets = (
+            self._gather_agent_data()
+        )  # <-- GET BUDGETS
         self.key, *agent_keys = jax.random.split(self.key, len(self.voters) + 1)
         agent_keys_array = jnp.array(agent_keys)
 
-        # Prepare ToM data. It's the same for both rounds in a single step.
         perceived_outcomes = jnp.tile(self.public_poll, (len(self.voters), 1))
 
         # --- ROUND 1 ---
@@ -327,23 +352,16 @@ class Environment:
             agent_keys_array,
             mask_round1,
             perceived_outcomes,
+            all_budgets,
         )
 
-        # Temporarily assign votes to count them
-        votes_round1 = results_round1[0]
-        is_ranking_vote = self.voting_system.name == "Ranking Voting"
-        for i, voter in enumerate(self.voters):
-            # This is the only loop you need. It handles both cases.
-            voter.last_vote = (
-                votes_round1[i] if is_ranking_vote else int(votes_round1[i])
-            )
+        self._scatter_results(results_round1)
 
-        # Count votes to find the top two finalists
+        # Count votes after round 1
         _, vote_counts_round1 = self.voting_system.counting_votes(
             self.voters, self.candidates
         )
         self.last_round1_results = vote_counts_round1
-
         print(f"Round 1 Results: {vote_counts_round1}")
 
         sorted_candidates = sorted(
@@ -353,7 +371,6 @@ class Environment:
         if len(sorted_candidates) < 2:
             print("Not enough candidates for a second round. Winner is from round 1.")
             self.winner_id = sorted_candidates[0][0] if sorted_candidates else -1
-            self._scatter_results(results_round1)  # Scatter final results
             self.scheduler.step(self)
             return
 
@@ -362,13 +379,13 @@ class Environment:
             f"Finalists for Round 2: Candidates {finalist_ids[0]} and {finalist_ids[1]}"
         )
 
-        # --- ROUND 2: Election with only the finalists ---
+        # --- ROUND 2 ---
         print("\n--- Round 2 ---")
         candidate_id_to_index = {c.id: i for i, c in enumerate(self.candidates)}
         finalist_indices = [candidate_id_to_index[fid] for fid in finalist_ids]
-        finalist_indices_arr = jnp.array(finalist_indices)
-
-        mask_round2 = jnp.zeros(len(self.candidates)).at[finalist_indices_arr].set(1.0)
+        mask_round2 = (
+            jnp.zeros(len(self.candidates)).at[jnp.array(finalist_indices)].set(1.0)
+        )
 
         results_round2 = self.vmap_get_votes_fn(
             all_mus,
@@ -377,9 +394,11 @@ class Environment:
             agent_keys_array,
             mask_round2,
             perceived_outcomes,
+            all_budgets,
         )
 
         self._scatter_results(results_round2)
+
         self.scheduler.step(self)
 
         self.winner_id, final_counts = self.voting_system.counting_votes(
@@ -387,7 +406,6 @@ class Environment:
         )
         self.last_round2_results = final_counts
 
-        # Update the poll for the next step using the *final* results
         self._update_public_poll(final_counts)
 
         print(f"Round 2 Results: {final_counts}")
