@@ -334,7 +334,7 @@ class SimulationVisualizer:
 
             ax.set_title(pref)
             ax.set_ylabel("Density")
-            ax.legend(title="Legend")
+            ax.legend(title="Candidate ID", frameon=True)
             ax.set_ylim(bottom=0)
 
         axes[-1].set_xlabel("Preference Value")

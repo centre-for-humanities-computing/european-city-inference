@@ -41,13 +41,6 @@ def kl_divergence(
     var_belief = 1 / precision_belief
     var_pref = 1 / precision_pref
 
-    # Ensure variances are positive and finite
-    # if jnp.any(var_belief <= 0) or jnp.any(var_pref <= 0):
-    #    raise ValueError("Variances must be positive.")
-
-    # if jnp.any(jnp.isinf(var_belief)) or jnp.any(jnp.isinf(var_pref)):
-    #    raise ValueError("Variances must be finite.")
-
     # Calculate KL divergence using the analytical formula for Gaussian distributions
     kl = (
         jnp.log(jnp.sqrt(var_pref) / jnp.sqrt(var_belief))

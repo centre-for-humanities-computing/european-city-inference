@@ -411,18 +411,17 @@ class Environment:
         print(f"Round 2 Results: {final_counts}")
         print(f"Final Winner is Candidate ID: {self.winner_id}.")
 
-    def run(self, num_steps: int) -> None:
-        """Run the simulation for a given number of steps.
-
-        Parameters
-        ----------
-        num_steps : int
-            The total number of steps to run the simulation for.
-        """
+    def run(self, num_steps: int, progress_callback=None) -> None:
+        """Run the simulation for a specified number of steps."""
         print("Starting simulation...")
         for i in range(num_steps):
             print(f"--- Step {i + 1}/{num_steps} ---")
             self.step()
             self.datacollector.collect(self)
             self._distribute_poll_to_voters()
+
+            # Update external progress bar if provided
+            if progress_callback is not None:
+                progress_callback(i + 1, num_steps)
+
         print("Simulation finished.")

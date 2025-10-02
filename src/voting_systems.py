@@ -171,22 +171,23 @@ class RankingVoting(VotingSystem):
     def counting_votes(
         self, voters: list[Voter], candidates: list[Candidate]
     ) -> tuple[int, dict[int, int]]:
-        """Calculate the Borda count winner from voter rankings.
+        """Count votes using the Borda count method.
 
         Parameters
         ----------
         voters : list[Voter]
-            A list of voters, where `voter.last_vote` is expected to be an
-            iterable of ranked candidate indices.
+            A list of voters, where each voter's `last_vote` is an ordered
+            iterable of candidate indices representing their ranking.
         candidates : list[Candidate]
-            A list of all candidates in the election.
+            A list of Candidate objects participating in the election.
 
         Returns
         -------
         tuple[int, dict[int, int]]
             A tuple containing:
-            - The ID of the winning candidate (-1 for a tie or no votes).
-            - A dictionary with the final Borda scores for each candidate.
+            - The ID of the winning candidate, or -1 in case of a tie or if
+            no valid votes are cast.
+            - A dictionary mapping candidate IDs to their final Borda scores.
         """
         num_candidates = len(candidates)
         if num_candidates == 0:
@@ -197,13 +198,12 @@ class RankingVoting(VotingSystem):
         points = {c.id: 0 for c in candidates}
         borda_points = jnp.arange(num_candidates - 1, -1, -1)
 
-        # Iterate through each voter to tabulate their ranked votes.
+        # Tabulate votes
         for voter in voters:
             ranked_indices = getattr(voter, "last_vote", None)
             if ranked_indices is None or not hasattr(ranked_indices, "__iter__"):
                 continue
 
-            # Award points based on the rank of each candidate.
             for rank, candidate_idx in enumerate(ranked_indices):
                 if rank < len(borda_points) and int(candidate_idx) < len(candidates):
                     candidate_id = candidates[int(candidate_idx)].id
@@ -214,16 +214,18 @@ class RankingVoting(VotingSystem):
         if not self.last_results or sum(self.last_results.values()) == 0:
             return -1, self.last_results
 
-        # Sort candidates by score to find the winner.
+        # Sort candidates by score
         sorted_scores = sorted(
             self.last_results.items(), key=lambda item: item[1], reverse=True
         )
+        max_score = sorted_scores[0][1]
+        winners = [cid for cid, score in sorted_scores if score == max_score]
 
-        # Check for a tie between the top two candidates.
-        if len(sorted_scores) > 1 and sorted_scores[0][1] == sorted_scores[1][1]:
-            return -1, self.last_results  # Tie
+        # Tie → -1
+        if len(winners) > 1:
+            return -1, self.last_results
 
-        winner_id = sorted_scores[0][0]
+        winner_id = winners[0]
         return winner_id, self.last_results
 
 

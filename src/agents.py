@@ -4,8 +4,6 @@ from typing import Any, Dict, List, Optional, Union
 
 import numpy as np
 
-from environment import Environment
-
 
 @dataclass
 class Agent(ABC):
@@ -23,7 +21,7 @@ class Agent(ABC):
     id: int
 
     @abstractmethod
-    def step(self, env: "Environment") -> None:
+    def step(self, env: Any) -> None:
         """Define the agent's action during a single simulation step.
 
         This method must be implemented by all subclasses. It contains the
@@ -70,6 +68,7 @@ class Voter(Agent):
     preferences: Dict[str, Any]
     tonic_volatility: float
     budget: float = 100.0
+
     # Attribute for Theory of Mind
     perceived_outcome: Optional[np.ndarray] = None
 
@@ -80,7 +79,7 @@ class Voter(Agent):
     traj: Optional[Any] = None
     observation: Optional[Any] = None
 
-    def step(self, env: "Environment") -> None:
+    def step(self, env: Any) -> None:
         """Perform the voter's action for a step.
 
         Parameters
@@ -123,7 +122,7 @@ class Candidate(Agent):
     # State attribute with a default value
     vote_count: int = 0
 
-    def step(self, env: "Environment") -> None:
+    def step(self, env: Any) -> None:
         """Perform the candidate's action for a step.
 
         Parameters
