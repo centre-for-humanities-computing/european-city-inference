@@ -9,8 +9,7 @@ import numpy as np
 class Agent(ABC):
     """An abstract class for all agents in the simulation.
 
-    This class provides the basic structure for any agent, ensuring that
-    each has a unique integer ID and a `step` method for its actions.
+    This class provides the basic structure for any agent.
 
     Attributes
     ----------
@@ -46,9 +45,9 @@ class Voter(Agent):
     Attributes
     ----------
     id : int
-        The agent's unique identifier (inherited from Agent).
+        The agent's unique identifier.
     preferences : Dict[str, Any]
-        The voter's intrinsic preferences, typically containing 'mean' and
+        The voter's preferences, typically containing 'mean' and
         'precision' vectors.
     tonic_volatility : float
         A parameter representing the voter's baseline level of choice volatility.
@@ -107,7 +106,7 @@ class Candidate(Agent):
     Attributes
     ----------
     id : int
-        The agent's unique identifier (inherited from Agent).
+        The agent's unique identifier.
     policy : Dict[str, Any]
         The candidate's policy platform, typically including 'mean' and
         'precision' vectors.

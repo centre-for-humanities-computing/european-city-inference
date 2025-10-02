@@ -96,7 +96,7 @@ class DataCollector:
         self.records.append(step_info)
 
     def get_dataframe(self) -> pd.DataFrame:
-        """Export collected data to a wide-format pandas DataFrame.
+        """Export collected data to pandas DataFrame.
 
         Returns
         -------
