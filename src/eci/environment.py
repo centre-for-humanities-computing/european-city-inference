@@ -6,11 +6,11 @@ import numpy as np
 from jax import vmap
 from pyhgf.model import Network
 
-from agents import Agent, Candidate, Voter
-from analysis import DataCollector
-from core_logic import individual_vote
-from utils import generate_observations
-from voting_systems import VotingSystem
+from eci.agents import Agent, Candidate, Voter
+from eci.analysis import DataCollector
+from eci.core_logic import individual_vote
+from eci.utils import generate_observations
+from eci.voting_systems import VotingSystem
 
 
 class Scheduler:

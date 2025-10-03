@@ -1,7 +1,6 @@
 import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
 import streamlit as st
-
 from agents import Voter
 from analysis import SimulationVisualizer
 from environment import Environment

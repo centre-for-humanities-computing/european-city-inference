@@ -7,10 +7,9 @@ import pandas as pd
 import seaborn as sns
 from scipy.stats import norm
 
-from agents import Voter
+from eci.agents import Voter
 
 if TYPE_CHECKING:
-    from agents import Voter
     from environment import Environment
 
 

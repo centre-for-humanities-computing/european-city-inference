@@ -4,7 +4,7 @@ from typing import Any, Dict, Tuple
 
 import jax.numpy as jnp
 
-from agents import Candidate, Voter
+from eci.agents import Candidate, Voter
 
 
 class VotingSystem(ABC):
