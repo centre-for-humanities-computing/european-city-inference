@@ -28,7 +28,7 @@ class Agent(ABC):
 
         Parameters
         ----------
-        environment : Any
+        environment
             The environment in which the agent exists, providing access to
             global state and other agents if needed.
         """
@@ -83,7 +83,7 @@ class Voter(Agent):
 
         Parameters
         ----------
-        environment : Any
+        environment
             The environment in which the agent exists, providing access to
             candidate policies and other relevant information.
 

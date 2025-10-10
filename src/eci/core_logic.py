@@ -67,21 +67,21 @@ def get_votes(
 
     Parameters
     ----------
-    key : jax.random.PRNGKey
+    key
         Random key for JAX.
-    attributes : Attributes
+    attributes
         Network-level attributes, including preference priors.
-    edges : Edges
+    edges
         Network structure mapping nodes to parents.
-    node_trajectories : dict
+    node_trajectories
         Dictionary of node belief trajectories (expected_mean, expected_precision).
-    input_idxs : tuple
+    input_idxs
         Indices of input nodes whose preferences are considered.
-    candidates : list
+    candidates
         List of candidate preferences (mean, precision).
-    mask : Array
+    mask
         Boolean mask of valid candidates.
-    voting_system : str, optional
+    voting_system
         Voting system to use:
         - "Plurality Voting" (default): softmax sampling of a single candidate.
         - "Ranked Voting": full ranking of candidates (descending preference).
@@ -89,9 +89,9 @@ def get_votes(
         - "Plurality Voting (ToM)": basic voting with Theory of Mind weights.
         - "Ranking Voting (ToM)": ranked voting with Theory of Mind weights.
         - "Quadratic Voting (ToM)": quadratic voting with Theory of Mind weights.
-    average_proportions_vector : Array, optional
+    average_proportions_vector
         Weights for candidate probabilities in "ToM" voting systems.
-    budget : float, optional
+    budget
         Budget for quadratic voting (default is 100.0).
 
     Returns
@@ -306,27 +306,27 @@ def individual_vote(
 
     Parameters
     ----------
-    mus : np.ndarray or None
+    mus
         Mean preferences for the agent. If None, new preferences are sampled.
-    pis : np.ndarray or None
+    pis
         Precision of preferences for the agent. If None, new precisions are sampled.
-    tonic_volatility : float
+    tonic_volatilityt
         Volatility of tonic preferences for updating nodes.
-    key : jax.random.PRNGKey
+    key
         Random key for JAX.
-    network : object
+    network
         Contains network attributes, edges, and methods like `input_data`.
-    candidates : list
+    candidates
         List of candidates (mean, precision) to vote on.
-    n_preferences : int
+    n_preferences
         Number of preferences to generate if mus or pis is None.
-    input_data : array-like
+    input_data
         Input data to update the network.
-    mask : array-like
+    mask
         Boolean mask of valid candidates.
-    voting_system : str
+    voting_system
         Voting system to use ("basic", "basic (ToM)", "ranked", "quadratic").
-    average_proportions_vector : array-like, optional
+    average_proportions_vector
         Weights for candidate probabilities in "basic (ToM)" voting system.
 
     Returns
@@ -396,15 +396,15 @@ def total_dissatisfaction_per_candidate(
 
     Parameters
     ----------
-    node_trajectories : dict
+    node_trajectories
         Dictionary mapping node indices to their belief trajectories, with keys:
         "expected_mean" and "expected_precision" (arrays of shape [time_steps]).
-    input_idxs : tuple
+    input_idxs
         Indices of the nodes whose preferences are considered.
-    candidates : list of tuple of ArrayLike
+    candidates
         Each candidate is a tuple of (mean_pref, precision_pref), each an array
         of the same length as `input_idxs`.
-    attributes : list of dict
+    attributes
         Network attributes; the last element should contain the baseline preferences:
         attributes[-1]["preferences"]["mean"] and ["precision"].
 
@@ -450,13 +450,13 @@ def init_preferences(
 
     Parameters
     ----------
-    n_agents : int
+    n_agents
         Number of agents for which to initialize preferences.
-    n_preferences : int
+    n_preferences
         Number of preferences each agent has.
-    manual_means : np.ndarray, optional
+    manual_means
         Manually specified mean preferences for agents.
-    manual_precisions : np.ndarray, optional
+    manual_precisions
         Manually specified precision preferences for agents.
 
     Returns

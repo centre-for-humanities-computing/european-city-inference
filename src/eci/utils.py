@@ -18,21 +18,21 @@ def generate_observations(
 
     Parameters
     ----------
-    n_nodes : int
+    n_nodes
         Number of nodes for which observations are generated.
-    n_steps : int
+    n_steps
         Number of time steps for simulations.
-    scenario : int, optional (default=1)
+    scenario
         Scenario identifier (1 or 2).
-    shock_pattern : str, optional
+    shock_pattern
         Pattern of shock for scenario 2 (None, "phase", "sudden", or "trend").
-    shock_time : int, optional
+    shock_time
         Time step at which shock begins.
-    recovery_time : int, optional
+    recovery_time
         Time step at which recovery begins.
-    trend_shape : str, optional (default="linear")
+    trend_shape
         Shape of the trend. Supported: "linear".
-    dispersion : float, optional (default=1.0)
+    dispersion
         Controls the dispersion of noise added to observations.
 
     Returns
@@ -131,13 +131,13 @@ def generate_candidates(
 
     Parameters
     ----------
-    n_candidates : int
+    n_candidates
         The number of candidates to generate.
-    n_preferences : int
+    n_preferences
         The number of preferences for each candidate.
-    manual_means : array-like, optional
+    manual_means
         Shape (n_candidates, n_preferences). If provided, overrides random generation.
-    manual_precisions : array-like, optional
+    manual_precisions
         Shape (n_candidates, n_preferences). If provided, overrides random generation.
 
     Returns

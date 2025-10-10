@@ -33,7 +33,7 @@ class Scheduler:
 
         Parameters
         ----------
-        agents : list[Agent]
+        agents
             A list of agents to be activated in each step. The order of
             activation is determined by the order of this list.
         """
@@ -49,7 +49,7 @@ class Scheduler:
 
         Parameters
         ----------
-        environment : Any
+        environment
             The simulation environment, which is passed to each agent's
             `step` method.
         """
@@ -69,15 +69,15 @@ class Environment:
 
     Parameters
     ----------
-    num_voters : int
+    num_voters
         The number of voter agents to create.
-    num_candidates : int
+    num_candidates
         The number of candidate agents to create.
-    num_preferences : int
+    num_preferences
         The dimensionality of the preference/policy space.
-    voting_system : VotingSystem
+    voting_system
         An instantiated voting system object that will be used to count votes.
-    scenario : int, optional
+    scenario
         An identifier for the scenario to run, used for data generation.
         Default is 1.
 
@@ -252,7 +252,7 @@ class Environment:
 
         Parameters
         ----------
-        results : tuple
+        results
             A tuple containing the outputs from the JAX computation, such as
             votes, probabilities, dissatisfactions, and trajectories.
         """
