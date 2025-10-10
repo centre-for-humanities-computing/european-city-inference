@@ -27,9 +27,9 @@ class DataCollector:
 
         Parameters
         ----------
-        results : Dict[int, float]
+        results
             A dictionary mapping candidate IDs to their scores.
-        round_num : int
+        round_num
             The round number to which the results apply.
 
         Returns
@@ -63,7 +63,7 @@ class DataCollector:
 
         Parameters
         ----------
-        environment : Environment
+        environment
             The simulation environment instance from which to collect data.
         """
         step_info = {
@@ -173,9 +173,9 @@ class SimulationVisualizer:
 
     Parameters
     ----------
-    environment : Environment
+    environment
         The main simulation environment instance.
-    datacollector : DataCollector
+    datacollector
         The data collector instance containing the simulation records.
 
     Attributes
@@ -210,7 +210,7 @@ class SimulationVisualizer:
 
         Parameters
         ----------
-        num_voters_to_show : int
+        num_voters_to_show
             The number of individual voter distributions to include in the data.
 
         Returns
@@ -271,9 +271,9 @@ class SimulationVisualizer:
 
         Parameters
         ----------
-        num_voters_to_show : int, optional
+        num_voters_to_show
             The number of individual voter distributions to show (default is 10).
-        axes : Optional[np.ndarray], optional
+        axes
             An array of matplotlib axes to plot on. If None, new axes are created.
 
         Returns
@@ -351,11 +351,11 @@ class SimulationVisualizer:
 
         Parameters
         ----------
-        voter : Voter
+        voter
             The Voter agent whose belief trajectory will be plotted.
-        preference_index : int, optional
+        preference_index
             The index of the preference topic to plot (default is 0).
-        axes : Optional[Tuple[plt.Axes, plt.Axes]], optional
+        axes
             A tuple of (ax_main, ax_density) to plot on. If None, a new
             figure and axes will be created.
 
@@ -467,10 +467,10 @@ class SimulationVisualizer:
 
         Parameters
         ----------
-        plot_kind : str, optional
+        plot_kind
             The kind of plot to generate, either 'histogram' or 'stripplot'
             (default is 'histogram').
-        axes : Optional[np.ndarray], optional
+        axes
             A numpy array of matplotlib axes to plot on. If None, new figure
             and axes will be created.
 

@@ -33,9 +33,9 @@ class VotingSystem(ABC):
 
         Parameters
         ----------
-        voters : list[Voter]
+        voters
             A list of Voter objects participating in the election.
-        candidates : list[Candidate]
+        candidates
             A list of Candidate objects running in the election.
 
         Returns
@@ -67,7 +67,7 @@ class PluralityVoting(VotingSystem):
 
         Parameters
         ----------
-        use_theory_of_mind : bool, optional
+        use_theory_of_mind
             If True, enables Theory of Mind modifications to the system's
             behavior and name (default is False).
         """
@@ -91,10 +91,10 @@ class PluralityVoting(VotingSystem):
 
         Parameters
         ----------
-        voters : list[Voter]
+        voters
             A list of Voter objects. It is assumed that `voter.last_vote`
             contains the ID of the chosen candidate.
-        candidates : list[Candidate]
+        candidates
             A list of all candidates in the election.
 
         Returns
@@ -154,7 +154,7 @@ class RankingVoting(VotingSystem):
 
         Parameters
         ----------
-        use_theory_of_mind : bool, optional
+        use_theory_of_mind
             If True, enables Theory of Mind modifications to the system's
             behavior and name (default is False).
         """
@@ -175,10 +175,10 @@ class RankingVoting(VotingSystem):
 
         Parameters
         ----------
-        voters : list[Voter]
+        voters
             A list of voters, where each voter's `last_vote` is an ordered
             iterable of candidate indices representing their ranking.
-        candidates : list[Candidate]
+        candidates
             A list of Candidate objects participating in the election.
 
         Returns
@@ -243,7 +243,7 @@ class QuadraticVoting(VotingSystem):
 
         Parameters
         ----------
-        use_theory_of_mind : bool, optional
+        use_theory_of_mind
             If True, enables Theory of Mind modifications to the system's
             behavior and name (default is False).
         """
@@ -264,10 +264,10 @@ class QuadraticVoting(VotingSystem):
 
         Parameters
         ----------
-        voters : list[Voter]
+        voters
             Voters, where `voter.last_vote` is an array of votes allocated
             to candidates.
-        candidates : list[Candidate]
+        candidates
             A list of all candidates in the election.
 
         Returns
