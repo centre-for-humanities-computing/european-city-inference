@@ -2,6 +2,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
+import matplotlib.ticker as mtick
 import numpy as np
 import pandas as pd
 import seaborn as sns
@@ -181,22 +182,43 @@ class SimulationVisualizer:
         if not vote_counts:
             return None
 
+        # 1. Data Preparation
         df = pd.DataFrame(vote_counts)
+
+        # Important: Treat IDs as categories (str) for consistent coloring
+        df["candidate_id"] = df["candidate_id"].astype(str)
+        # Sort to keep color order consistent (C0, C1, C2...)
+        df = df.sort_values("candidate_id")
+
         n_rounds = df["round"].nunique()
+        rounds = sorted(df["round"].unique())
 
         with self._get_context():
+            # 2. Figure creation if not provided
             if axes is None:
+                # sharex=True and sharey=True for rigorous comparison
                 fig, axes = plt.subplots(
-                    1, n_rounds, figsize=(9 * n_rounds, 7), sharey=True
+                    1,
+                    n_rounds,
+                    figsize=(
+                        6 * n_rounds,
+                        6,
+                    ),  # Increased height slightly for the title
+                    sharey=True,
+                    sharex=True,
                 )
                 axes = np.atleast_1d(axes)
             else:
                 fig = axes[0].get_figure()
 
-            all_cands = sorted(df["candidate_id"].unique())
-            palette = dict(zip(all_cands, sns.color_palette("tab10", len(all_cands))))
+            # Consistent palette across graphs
+            unique_cands = df["candidate_id"].unique()
+            palette = dict(
+                zip(unique_cands, sns.color_palette("tab10", len(unique_cands)))
+            )
 
-            for ax, r_num in zip(axes, sorted(df["round"].unique())):
+            # 3. Plotting loop
+            for i, (ax, r_num) in enumerate(zip(axes, rounds)):
                 round_data = df[df["round"] == r_num]
 
                 if plot_kind == "stripplot":
@@ -207,23 +229,55 @@ class SimulationVisualizer:
                         hue="candidate_id",
                         palette=palette,
                         orient="h",
+                        size=6,
+                        alpha=0.8,
                         ax=ax,
                         legend=False,
                     )
-                else:
-                    for cid in round_data["candidate_id"].unique():
-                        subset = round_data[round_data["candidate_id"] == cid]
-                        ax.hist(
-                            subset["proportion"],
-                            bins=20,
-                            density=True,
-                            alpha=0.6,
-                            color=palette.get(cid),
-                            label=f"C{cid}",
-                        )
-                    ax.legend()
+                    ax.grid(axis="x", linestyle="--", alpha=0.5)
 
-                ax.set_title(f"Round {r_num}")
+                else:  # Improved Histogram
+                    sns.histplot(
+                        data=round_data,
+                        x="proportion",
+                        hue="candidate_id",
+                        palette=palette,
+                        bins=20,  # Number of bins
+                        stat="density",  # Or "count" or "percent" as needed
+                        element="step",  # "step" is more readable than stacked bars
+                        fill=True,  # Light fill
+                        alpha=0.3,  # Transparency
+                        common_norm=False,  # Normalize each distribution independently
+                        ax=ax,
+                        legend=(i == n_rounds - 1),  # Legend only on the last plot
+                    )
+
+                # 4. Cleanup and "Pro" Aesthetics
+                ax.set_title(f"Round {r_num}", fontsize=14, fontweight="bold", pad=10)
+
+                # Force X limits between 0 and 1 (0% and 100%)
+                ax.set_xlim(0, 1.05)
+
+                # Format X axis as percentage (0%, 20%, ...)
+                ax.xaxis.set_major_formatter(mtick.PercentFormatter(1.0))
+
+                # Labels
                 ax.set_xlabel("Vote Share")
+                if i == 0:
+                    ylabel = "Density" if plot_kind != "stripplot" else "Candidates"
+                    ax.set_ylabel(ylabel)
+                else:
+                    ax.set_ylabel("")  # No Y label on subsequent charts
+
+                # Legend management
+                if plot_kind != "stripplot" and i == n_rounds - 1:
+                    sns.move_legend(ax, "upper right", title="Candidates")
+
+            fig.suptitle(
+                "Vote Distribution Analysis per Round", fontsize=16, fontweight="bold"
+            )
+
+            # Adjust layout (rect makes space for suptitle)
+            plt.tight_layout(rect=[0, 0, 1, 0.95])
 
             return fig, axes
