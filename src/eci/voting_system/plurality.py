@@ -243,3 +243,20 @@ def _sample_vote(
     vote = jax.random.categorical(key, masked_preferences, axis=1)
 
     return vote, softmax_probs
+
+
+def _update_public_poll(self, vote_counts: dict) -> None:
+    """Update the public poll with the latest election results."""
+    if not self.use_theory_of_mind or not vote_counts:
+        return
+
+    total_votes = sum(vote_counts.values())
+    if total_votes == 0:
+        return
+
+    # Create a vector of vote proportions from the results dict
+    candidate_ids = [c.id for c in self.candidates]
+    self.public_poll = jnp.array(
+        [vote_counts.get(cid, 0) / total_votes for cid in candidate_ids]
+    )
+    print(f"Public poll updated: {self.public_poll}")
