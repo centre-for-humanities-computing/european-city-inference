@@ -17,13 +17,13 @@ dependencies = [
     "pyhgf>=0.2.7",
     "pytest>=8.4.2",
     "seaborn>=0.13.2",
-
     "pre-commit>=4.3.0",
     "ipython>=9.6.0",
     "jupyter>=1.1.1",
     "watermark",
     "ruff",
     "pytest-cov",
+    "pingouin>=0.5.5",
 ]
 
 [tool.ruff]

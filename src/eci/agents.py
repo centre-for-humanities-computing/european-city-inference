@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional
 
 import numpy as np
 
@@ -51,16 +51,25 @@ class Voter(Agent):
         'precision' vectors.
     tonic_volatility : float
         A parameter representing the voter's baseline level of choice volatility.
-    last_vote : Optional[int]
-        The ID of the candidate the voter chose in the last step.
-    last_softmax_probs : Optional[Dict[int, float]]
-        A dictionary mapping candidate IDs to choice probabilities from the last step.
-    last_dissatisfactions : Optional[Dict[int, float]]
-        A dictionary mapping candidate IDs to dissatisfaction scores from the last step.
-    traj : Optional[Any]
-        Stores trajectory data from the last simulation step, if any.
-    observation : Optional[Any]
-        Stores observation data from the last simulation step, if any.
+    budget : float, optional
+        The voter's budget for influencing their decision, by default 100.0.
+    perceived_outcome : Optional[np.ndarray], optional
+        The voter's perception of the election outcome, used for Theory of Mind,
+        by default None.
+    vote_round_1 : Optional[Union[int, np.ndarray, List[int]]], optional
+        The voter's choice in the first round of voting, by default None.
+    vote_round_2 : Optional[Union[int, np.ndarray, List[int]]], optional
+        The voter's choice in the second round of voting, by default None.
+    softmax_probs_1 : Optional[Dict[int, float]], optional
+        The softmax probabilities for the first round of voting.
+    softmax_probs_2 : Optional[Dict[int, float]], optional
+        The softmax probabilities for the second round of voting.
+    dissatisfactions : Optional[Dict[int, float]], optional
+        The voter's dissatisfaction levels.
+    trajectory : Optional[Any], optional
+        The voter's trajectory data, by default None.
+    observation: Optional[Any], optional
+        The voter's observation data, by default None.
     """
 
     # Initialization
@@ -71,11 +80,13 @@ class Voter(Agent):
     # Attribute for Theory of Mind
     perceived_outcome: Optional[np.ndarray] = None
 
-    # State attributes (with default values, not needed at initialization)
-    last_vote: Optional[Union[int, np.ndarray, List[int]]] = None
-    last_softmax_probs: Optional[Dict[int, float]] = field(default_factory=dict)
-    last_dissatisfactions: Optional[Dict[int, float]] = field(default_factory=dict)
-    traj: Optional[Any] = None
+    # State attributes
+    vote_round_1: Optional[List[int]] = field(default_factory=list)
+    vote_round_2: Optional[List[int]] = field(default_factory=list)
+    softmax_probs_1: Optional[List[int]] = field(default_factory=list)
+    softmax_probs_2: Optional[List[int]] = field(default_factory=list)
+    dissatisfactions: Optional[List[int]] = field(default_factory=list)
+    trajectory: Optional[Any] = None
     observation: Optional[Any] = None
 
     def step(self, env: Any) -> None:
@@ -115,7 +126,7 @@ class Candidate(Agent):
         by the `VotingSystem`.
     """
 
-    # Required attribute
+    # (same as preference)
     policy: Dict[str, Any]
 
     # State attribute with a default value
