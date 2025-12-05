@@ -1,3 +1,4 @@
+import re
 from typing import Any, Counter, Dict, List
 
 import numpy as np
@@ -56,45 +57,43 @@ class SimulationAdapter:
 
     @staticmethod
     def extract_vote_counts(env_df: pd.DataFrame) -> List[Dict[str, Any]]:
-        """Convert JAX/Pandas DataFrame into a list of proportions."""
+        """Convert JAX/Pandas DataFrame into a list of proportions dynamically."""
         records = []
 
-        # 1. Local helper function to clean heterogeneous data
         def clean_votes(votes_obj) -> List[int]:
             if votes_obj is None:
                 return []
+            return np.array(votes_obj).flatten().tolist()
 
-            try:
-                return np.array(votes_obj).flatten().tolist()
-            except Exception:
-                return []
+        vote_cols = [c for c in env_df.columns if "vote" in c.lower()]
 
-        # 2. Iterate over each simulation
         for _, row in env_df.iterrows():
             sim_id = row.get("simulation_id", row.name)
 
-            # Loop over rounds 1 and 2 to avoid code duplication
-            for round_num in [1, 2]:
-                col_name = f"vote_round_{round_num}"
+            for col_name in vote_cols:
+                digits = re.findall(r"\d+", col_name)
 
-                # Check if the column exists and contains data
-                if col_name in row:
-                    raw_votes = row[col_name]
-                    votes = clean_votes(raw_votes)
-                    total = len(votes)
+                if digits:
+                    round_id = int(digits[-1])
+                else:
+                    round_id = col_name
 
-                    if total > 0:
-                        counts = Counter(votes)
+                raw_votes = row[col_name]
+                votes = clean_votes(raw_votes)
+                total = len(votes)
 
-                        for cand_id, count in counts.items():
-                            records.append(
-                                {
-                                    "simulation_id": sim_id,
-                                    "round": round_num,
-                                    "candidate_id": int(cand_id),
-                                    "proportion": count / total,
-                                }
-                            )
+                if total > 0:
+                    counts = Counter(votes)
+                    for cand_id, count in counts.items():
+                        records.append(
+                            {
+                                "simulation_id": sim_id,
+                                "round": round_id,
+                                "candidate_id": int(cand_id),
+                                "proportion": count / total,
+                                "total_votes": total,
+                            }
+                        )
 
         return records
 
@@ -102,10 +101,9 @@ class SimulationAdapter:
     def get_voter_trajectory_data(env, voter_id: int, pref_idx: int = 0):
         """Retrieve specific arrays for a single voter's belief trajectory."""
         voter = next(v for v in env.voters if v.id == voter_id)
-
         return {
-            "means": voter.traj["expected_mean"][voter.id],
-            "precisions": voter.traj["precision"][voter.id],
+            "means": voter.trajectory["expected_mean"][voter.id],
+            "precisions": voter.trajectory["precision"][voter.id],
             "observations": env.input_data[:, pref_idx],
             "preference_params": (
                 voter.preferences["mean"][pref_idx],

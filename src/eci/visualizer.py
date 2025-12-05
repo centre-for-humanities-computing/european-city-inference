@@ -100,13 +100,9 @@ class SimulationVisualizer:
         with self._get_context():
             if axes is None:
                 fig = plt.figure(figsize=(12, 6))
-                # Ajustement ratios: 5 parts Traj, 1 part Densité
                 gs = gridspec.GridSpec(1, 6, figure=fig, wspace=0.02)
                 ax_main = fig.add_subplot(gs[0, 0:5])
                 ax_density = fig.add_subplot(gs[0, 5], sharey=ax_main)
-            else:
-                ax_main, ax_density = axes
-                fig = ax_main.get_figure()
 
             # --- 1. Main Trajectory ---
             time_steps = range(len(observations))
@@ -120,7 +116,6 @@ class SimulationVisualizer:
             )
             ax_main.plot(means, color="#D62728", linewidth=2.5, label="Belief (Mean)")
 
-            # Intervalle de confiance
             ax_main.fill_between(
                 time_steps,
                 means - 1.96 * std_devs,
@@ -129,8 +124,6 @@ class SimulationVisualizer:
                 alpha=0.1,
                 label="95% CI",
             )
-
-            # Gestion du zoom Y (essentiel pour que la densité soit belle)
             if ylim:
                 ax_main.set_ylim(ylim)
 
@@ -158,8 +151,6 @@ class SimulationVisualizer:
             local_max = pdf.max()
             if local_max > 0:
                 pdf_norm = (pdf / local_max) * 0.9
-            else:
-                pdf_norm = pdf
 
             ax_density.plot(pdf_norm, y_vals, color="#555555", lw=1, alpha=0.8)
             ax_density.fill_betweenx(y_vals, 0, pdf_norm, color="gray", alpha=0.2)
@@ -185,7 +176,6 @@ class SimulationVisualizer:
         # 1. Data Preparation
         df = pd.DataFrame(vote_counts)
 
-        # Important: Treat IDs as categories (str) for consistent coloring
         df["candidate_id"] = df["candidate_id"].astype(str)
         # Sort to keep color order consistent (C0, C1, C2...)
         df = df.sort_values("candidate_id")
@@ -208,8 +198,6 @@ class SimulationVisualizer:
                     sharex=True,
                 )
                 axes = np.atleast_1d(axes)
-            else:
-                fig = axes[0].get_figure()
 
             # Consistent palette across graphs
             unique_cands = df["candidate_id"].unique()
