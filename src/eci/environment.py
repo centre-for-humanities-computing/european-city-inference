@@ -132,48 +132,70 @@ class Environment:
     def _update_agents(self) -> None:
         """Update agents with the results from the simulations."""
         for simulation_number in self.sim_result.keys():
-            for agent_idx in range(len(self.voters)):
-                # Create a local reference for cleaner code
-                voter = self.voters[agent_idx]
+            sim_data = self.sim_result[simulation_number]
+            if "vote_round_1" in sim_data:
+                for agent_idx in range(len(self.voters)):
+                    # Create a local reference for cleaner code
+                    voter = self.voters[agent_idx]
 
-                # 1. Vote Round 1
-                if voter.vote_round_1 is None:
-                    voter.vote_round_1 = []
-                voter.vote_round_1.append(
-                    self.sim_result[simulation_number]["vote_round_1"][agent_idx]
-                )
+                    # 1. Vote Round 1
+                    if voter.vote_round_1 is None:
+                        voter.vote_round_1 = []
+                    voter.vote_round_1.append(
+                        self.sim_result[simulation_number]["vote_round_1"][agent_idx]
+                    )
 
-                # 2. Vote Round 2
-                if voter.vote_round_2 is None:
-                    voter.vote_round_2 = []
-                voter.vote_round_2.append(
-                    self.sim_result[simulation_number]["vote_final_round_2"][agent_idx]
-                )
+                    # 2. Vote Round 2
+                    if voter.vote_round_2 is None:
+                        voter.vote_round_2 = []
+                    voter.vote_round_2.append(
+                        self.sim_result[simulation_number]["vote_final_round_2"][
+                            agent_idx
+                        ]
+                    )
 
-                # 3. Softmax Probs 1
-                if voter.softmax_probs_1 is None:
-                    voter.softmax_probs_1 = []
-                voter.softmax_probs_1.append(
-                    self.sim_result[simulation_number]["softmax_probs_round_1"][
-                        agent_idx
-                    ]
-                )
+                    # 3. Softmax Probs 1
+                    if voter.softmax_probs_1 is None:
+                        voter.softmax_probs_1 = []
+                    voter.softmax_probs_1.append(
+                        self.sim_result[simulation_number]["softmax_probs_round_1"][
+                            agent_idx
+                        ]
+                    )
 
-                # 4. Softmax Probs 2
-                if voter.softmax_probs_2 is None:
-                    voter.softmax_probs_2 = []
-                voter.softmax_probs_2.append(
-                    self.sim_result[simulation_number]["softmax_probs_final_round_2"][
-                        agent_idx
-                    ]
-                )
+                    # 4. Softmax Probs 2
+                    if voter.softmax_probs_2 is None:
+                        voter.softmax_probs_2 = []
+                    voter.softmax_probs_2.append(
+                        self.sim_result[simulation_number][
+                            "softmax_probs_final_round_2"
+                        ][agent_idx]
+                    )
 
-                # 5. Dissatisfactions
-                if voter.dissatisfactions is None:
-                    voter.dissatisfactions = []
-                voter.dissatisfactions.append(
-                    self.sim_result[simulation_number]["dissatisfaction"][agent_idx]
-                )
+                    # 5. Dissatisfactions
+                    if voter.dissatisfactions is None:
+                        voter.dissatisfactions = []
+                    voter.dissatisfactions.append(
+                        self.sim_result[simulation_number]["dissatisfaction"][agent_idx]
+                    )
+            elif "vote_matrix" in sim_data:
+                for agent_idx in range(len(self.voters)):
+                    # Create a local reference for cleaner code
+                    voter = self.voters[agent_idx]
+
+                    # 1. Vote Round 1
+                    if voter.vote_matrix is None:
+                        voter.vote_round_1 = []
+                    voter.vote_round_1.append(
+                        self.sim_result[simulation_number]["vote_matrix"][agent_idx]
+                    )
+
+                    # 5. Dissatisfactions
+                    if voter.dissatisfactions is None:
+                        voter.dissatisfactions = []
+                    voter.dissatisfactions.append(
+                        self.sim_result[simulation_number]["dissatisfaction"][agent_idx]
+                    )
 
     def create_network(self, mu, pi, tonic_volatility, network):
         """Prepare network for voting."""
@@ -198,7 +220,7 @@ class Environment:
             self.network.edges[idx].value_parents[0] for idx in self.network.input_idxs
         ]
         for agent_idx in range(self.voters.__len__()):
-            self.agents[agent_idx].traj = self.node_trajectories[0]
+            self.agents[agent_idx].trajectory = self.node_trajectories[0]
 
     def get_winners(self, vote_list, top_n):
         """Determine the top N winners from a list of votes."""

@@ -2,7 +2,7 @@ import jax
 import jax.numpy as jnp
 from jax.typing import ArrayLike
 
-from eci.core_logic import (
+from eci.utils import (
     kl_divergence,  # Make sure this function handles JAX broadcasting
 )
 
