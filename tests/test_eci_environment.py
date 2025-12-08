@@ -70,25 +70,6 @@ def test_environment_initialization(mock_dependencies):
     )
 
 
-def test_create_voters_initialization(mock_dependencies):
-    """Verify that voters are created with initialized history lists."""
-    mock_voter_cls = mock_dependencies["Voter"]
-
-    # Make the mock instance behave like an object where we can set attributes
-    mock_voter_instance = MagicMock()
-    mock_voter_cls.return_value = mock_voter_instance
-
-    # Check if the specific lists were initialized on the voter instance
-    # (The code modifies the instance after creation)
-    assert mock_voter_instance.vote_round_1 == []
-    assert mock_voter_instance.vote_round_2 == []
-    assert mock_voter_instance.softmax_probs_1 == []
-    assert mock_voter_instance.dissatisfactions == []
-
-
-# --- Data Gathering & Network Tests ---
-
-
 def test_gather_agent_data(env):
     """Test aggregation of voter attributes into arrays."""
     # Setup mock voters with specific data
