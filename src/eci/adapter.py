@@ -10,7 +10,7 @@ class SimulationAdapter:
     """Serves as a bridge between the Environment and SimulationVisualizer."""
 
     @staticmethod
-    def prepare_preference_data(env, num_voters=10) -> pd.DataFrame:
+    def prepare_preference_data(env) -> pd.DataFrame:
         """Prepare preference distribution data for visualization."""
         rows = []
         x_vals = np.linspace(-3, 4, 400)
@@ -35,7 +35,7 @@ class SimulationAdapter:
                 )
 
         # Extract Voters
-        for v in env.voters[:num_voters]:
+        for v in env.voters:
             for p_idx, (m, p) in enumerate(
                 zip(v.preferences["mean"], v.preferences["precision"])
             ):
