@@ -6,19 +6,17 @@ from eci.utils import kl_divergence
 
 def _vote_quadratic(env, key, budget: float = 99.0, *args, **kwargs) -> dict:
     """Apply Quadratic Voting."""
-    # 1. Extract all agent beliefs and preferences
+    # Extract all agent beliefs and preferences
     all_agent_data = _get_current_beliefs_t(env)
 
-    # 2. Get stacked beliefs and dissatisfaction per agent
+    # Get stacked beliefs and dissatisfaction per agent
     (
         dissatisfaction_per_agent,
         beliefs_mean_t,
         beliefs_precision_t,
     ) = _get_current_dissatisfaction(env, all_agent_data)
 
-    # 3. Evaluate candidate scores FOR EACH agent
-    # Shape: (num_agents, num_candidates)
-    # This represents the "Marginal Utility" of each candidate for each agent.
+    # Evaluate candidate scores FOR EACH agent
     candidate_preferences = _evaluate_candidate_scores(
         env,
         beliefs_mean_t,
@@ -28,26 +26,23 @@ def _vote_quadratic(env, key, budget: float = 99.0, *args, **kwargs) -> dict:
 
     # --- QUADRATIC VOTING LOGIC ---
 
-    # 4. Filter negative preferences
+    # Filter negative preferences
     # Agents only spend credits on candidates that reduce dissatisfaction (score > 0).
-    # Shape: (num_agents, num_candidates)
     positive_preferences = jnp.maximum(candidate_preferences, 0.0)
 
-    # 5. Normalize preferences to determine budget allocation
-    # Calculate total positive utility per agent to normalize
+    # Normalize preferences to determine budget allocation
     sum_preferences = jnp.sum(positive_preferences, axis=1, keepdims=True)
 
     # Avoid division by zero for agents who hate everyone (sum = 0)
     safe_sum = jnp.where(sum_preferences == 0, 1.0, sum_preferences)
 
     # Proportion of budget allocated to each candidate
-    # Shape: (num_agents, num_candidates)
     proportions = positive_preferences / safe_sum
 
     # If sum was 0, proportion should be 0, not result of division
     proportions = jnp.where(sum_preferences == 0, 0.0, proportions)
 
-    # 6. Spend Credits & Calculate Quadratic Votes
+    # Spend Credits & Calculate Quadratic Votes
     # Credits spent = Budget * Proportion
     credits_spent = proportions * budget
 
@@ -55,24 +50,20 @@ def _vote_quadratic(env, key, budget: float = 99.0, *args, **kwargs) -> dict:
     # This is the defining math of Quadratic Voting
     votes_matrix = jnp.sqrt(credits_spent)
 
-    # 7. Determine Winners
+    # Determine Winners
     # Sum the weighted votes across all agents for each candidate
-    # Shape: (num_candidates,)
     total_votes_per_candidate = jnp.sum(votes_matrix, axis=0)
 
-    # Find indices of top winners (descending order)
-    # argsort sorts ascending, so we take the end and reverse
+    # Find indices of top winners
     sorted_indices = jnp.argsort(total_votes_per_candidate)[::-1]
 
     # Get top two indices
     top_two_indices = sorted_indices[:2]
 
-    # Map indices back to candidate IDs (assuming env.candidates is accessible list)
-    # We create an array of IDs corresponding to the indices
+    # Map indices back to candidate IDs
     candidate_ids = jnp.array([c.id for c in env.candidates])
     top_two_winners = candidate_ids[top_two_indices]
 
-    # Handle edge case: strictly less than 2 candidates in the simulation
     if top_two_winners.shape[0] < 2:
         top_two_winners = jnp.pad(
             top_two_winners, (0, 2 - top_two_winners.shape[0]), mode="edge"
@@ -80,18 +71,17 @@ def _vote_quadratic(env, key, budget: float = 99.0, *args, **kwargs) -> dict:
 
     # --- RESULTS ---
     return {
-        "vote_matrix": votes_matrix,  # (num_agents, num_candidates) weighted votes
-        "total_votes": total_votes_per_candidate,  # Sum of votes per candidate
-        "winners": top_two_winners,  # IDs or Indices of winners
-        "credits_spent": credits_spent,  # How much budget was burned
-        "proportions": proportions,  # Allocation strategy
+        "vote_matrix": votes_matrix,
+        "total_votes": total_votes_per_candidate,
+        "winners": top_two_winners,
+        "credits_spent": credits_spent,
+        "proportions": proportions,
         "dissatisfaction": dissatisfaction_per_agent,
-        # Legacy key for compatibility if needed (returns index of max vote per agent)
         "vote_choice_legacy": jnp.argmax(votes_matrix, axis=1),
     }
 
 
-# --- Helper Functions (Unchanged or adapted slightly) ---
+# --- Helper Functions ---
 
 
 def _get_current_beliefs_t(env) -> dict:
@@ -178,7 +168,6 @@ def _evaluate_candidate_scores(
 
         expected_dissatisfaction_per_agent = jnp.sum(expected_dissatisfaction, axis=1)
 
-        # Score = Current Dissatisfaction - Expected Dissatisfaction with Candidate
         preference_score_per_agent = (
             dissatisfaction_per_agent - expected_dissatisfaction_per_agent
         )

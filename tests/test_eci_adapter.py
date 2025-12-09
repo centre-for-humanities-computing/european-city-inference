@@ -20,7 +20,6 @@ class MockVoter:
     def __init__(self, v_id, mean, precision):
         self.id = v_id
         self.preferences = {"mean": mean, "precision": precision}
-        # Simulate the deep structure of the HGF trajectory
         self.trajectory = {
             "expected_mean": {v_id: np.array([0.1, 0.2, 0.3])},
             "precision": {v_id: np.array([1.0, 1.0, 1.0])},
@@ -62,12 +61,6 @@ class TestSimulationAdapter:
         expected_cols = ["group", "id", "preference", "x", "pdf"]
         for col in expected_cols:
             assert col in df.columns
-
-        # Check Logic:
-        # We have 2 candidates + 1 voter (limit set to 1) = 3 entities
-        # Each entity has 1 preference dimension.
-        # The linspace generates 400 points.
-        # Total rows should be 3 * 400 = 1200
 
         # Check Groups
         assert "Candidate" in df["group"].values

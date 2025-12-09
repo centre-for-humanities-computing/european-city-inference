@@ -71,6 +71,5 @@ def test_agent_abstract_step_coverage():
             super().step(env=None)
 
     # Instantiate the concrete test class
-    # Since Agent is a dataclass, __init__ is inherited, so we pass 'id'
     agent = ConcreteAgentForTest(id=999)
     agent.step()

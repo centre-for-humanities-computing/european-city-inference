@@ -126,7 +126,6 @@ class Candidate(Agent):
         by the `VotingSystem`.
     """
 
-    # (same as preference)
     policy: Dict[str, Any]
 
     # State attribute with a default value

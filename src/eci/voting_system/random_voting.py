@@ -22,34 +22,33 @@ def _vote_random(env, key, *args, **kwargs) -> dict:
 
     # --- ROUND 1 ---
 
-    # 3. Split the JAX key
+    # Split the JAX key
     key_round_1, key_round_2 = jax.random.split(key)
 
-    # 4. Create mask for round 1 (all candidates are eligible)
+    # Create mask for round 1 (all candidates are eligible)
     mask_round_1 = jnp.ones_like(random_preferences, dtype=bool)
 
-    # 5. Sample round 1 vote (Uniformly random)
+    # Sample round 1 vote (Uniformly random)
     vote_1, softmax_probs_1 = _sample_vote(
         key_round_1, mask_round_1, random_preferences
     )
 
-    # 6. Find the top two winners from round 1 (pure luck here)
+    # Find the top two winners from round 1 (pure luck here)
     top_two_winners = _find_top_two_winners(vote_1)
 
     # --- ROUND 2 ---
 
-    # 7. Create mask for round 2 (only top two are eligible)
+    # Create mask for round 2 (only top two are eligible)
     all_candidates_indices = jnp.arange(num_candidates)
     mask_round_2_1d = jnp.isin(all_candidates_indices, top_two_winners)
     mask_round_2 = jnp.broadcast_to(mask_round_2_1d, random_preferences.shape)
 
-    # 8. Sample final vote (Random choice between the 2 finalists)
-    # The helper _sample_vote handles the -inf masking automatically
+    # Sample final vote (Random choice between the 2 finalists)
     vote_2, softmax_probs_2 = _sample_vote(
         key_round_2, mask_round_2, random_preferences
     )
 
-    # 9. Find the final winner
+    # Find the final winner
     final_winner = _find_top_two_winners(vote_2)[0]
 
     # --- RESULTS ---
@@ -67,7 +66,7 @@ def _vote_random(env, key, *args, **kwargs) -> dict:
     }
 
 
-# --- Helper Functions (Unchanged or adapted slightly) ---
+# --- Helper Functions ---
 
 
 def _get_current_beliefs_t(env) -> dict:
@@ -154,7 +153,6 @@ def _evaluate_candidate_scores(
 
         expected_dissatisfaction_per_agent = jnp.sum(expected_dissatisfaction, axis=1)
 
-        # Score = Current Dissatisfaction - Expected Dissatisfaction with Candidate
         preference_score_per_agent = (
             dissatisfaction_per_agent - expected_dissatisfaction_per_agent
         )

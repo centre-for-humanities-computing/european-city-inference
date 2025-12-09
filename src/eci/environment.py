@@ -38,9 +38,9 @@ class Environment:
         self.last_round1_results: Optional[Dict[Any, Any]] = None
         self.last_round2_results: Optional[Dict[Any, Any]] = None
         network = Network()
-        network.add_nodes(kind="binary-state", n_nodes=self.num_preferences)  # class
-        for i in range(self.num_preferences):  # class
-            network.add_nodes(value_children=i)  # class
+        network.add_nodes(kind="binary-state", n_nodes=self.num_preferences)
+        for i in range(self.num_preferences):
+            network.add_nodes(value_children=i)
         self.network = network
         self.df = None
         self.input_data = generate_observations(
@@ -67,12 +67,11 @@ class Environment:
             preferences = {"mean": mean, "precision": precision}
             tonic_volatility = np.random.normal(-3.0, 1.0)
             voter = Voter(
-                id=self._get_new_agent_id(),  # <-- Corrected argument name
+                id=self._get_new_agent_id(),
                 preferences=preferences,
                 tonic_volatility=tonic_volatility,
             )
 
-            # --- FIX 1: Initialize lists to avoid "None" attribute errors ---
             voter.vote_round_1 = []
             voter.vote_round_2 = []
             voter.softmax_probs_1 = []
@@ -91,10 +90,10 @@ class Environment:
             precision = jax.random.uniform(
                 subkey2, shape=(self.num_preferences,), minval=0.3, maxval=1.0
             )
-            policy_data = {"mean": mean, "precision": precision}  # Renamed for clarity
+            policy_data = {"mean": mean, "precision": precision}
             candidate = Candidate(
-                id=self._get_new_agent_id(),  # <-- Corrected argument name
-                policy=policy_data,  # <-- Corrected argument name
+                id=self._get_new_agent_id(),
+                policy=policy_data,
             )
             self.candidates.append(candidate)
 

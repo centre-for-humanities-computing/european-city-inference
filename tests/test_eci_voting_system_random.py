@@ -1,10 +1,8 @@
 import jax
 import jax.numpy as jnp
 
-# Import your functions here.
-# Assuming your file is named 'voting_module.py', adapt the import:
 from eci.voting_system.random_voting import (
-    _find_top_two_winners,  # Needed to mock its return if not mocking the env deeply
+    _find_top_two_winners,
     _sample_vote,
     _vote_random,
 )
