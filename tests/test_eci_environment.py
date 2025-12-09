@@ -7,8 +7,6 @@ import pytest
 
 from src.eci.environment import Environment
 
-# --- Fixtures ---
-
 
 @pytest.fixture
 def mock_dependencies():
@@ -121,7 +119,6 @@ def test_run_n_simulation(env):
     """Test running multiple simulations and aggregating results."""
 
     # Mock a simulation function
-    # It should return a dict of results per agent
     def mock_sim_func(e, k):
         return {
             "vote_round_1": jnp.zeros(len(e.voters)),

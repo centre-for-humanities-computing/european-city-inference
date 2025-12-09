@@ -4,14 +4,12 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from src.eci.voting_system.quad import (
+from eci.voting_system.quadratic import (
     _evaluate_candidate_scores,
     _get_current_beliefs_t,
     _get_current_dissatisfaction,
     _vote_quadratic,
 )
-
-# --- Fixtures ---
 
 
 @pytest.fixture
