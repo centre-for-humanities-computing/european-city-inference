@@ -171,12 +171,6 @@ class Environment:
                         ][agent_idx]
                     )
 
-                    # 5. Dissatisfactions
-                    if voter.dissatisfactions is None:
-                        voter.dissatisfactions = []
-                    voter.dissatisfactions.append(
-                        self.sim_result[simulation_number]["dissatisfaction"][agent_idx]
-                    )
             elif "vote_matrix" in sim_data:
                 for agent_idx in range(len(self.voters)):
                     # Create a local reference for cleaner code
