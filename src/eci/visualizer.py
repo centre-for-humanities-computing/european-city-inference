@@ -77,10 +77,9 @@ class SimulationVisualizer:
                             v_data["x"],
                             v_data["pdf"],
                             color="black",
-                            alpha=0.03,
+                            alpha=0.2,
                             label="Voters" if i == 0 else "",
                         )
-
                 ax.set(title=pref)
                 ax.legend(loc="upper right")
 

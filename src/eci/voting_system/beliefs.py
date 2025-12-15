@@ -106,10 +106,10 @@ def _get_pref_belief_gap(all_agent_data: dict) -> ArrayLike:
         (divergence) for each agent given their current beliefs.
     """
     # Extract and stack arrays from each agent
-    beliefs_mean_t = jnp.stack(
+    beliefs_mean = jnp.stack(
         [agent_data["means_belief"] for agent_data in all_agent_data.values()]
     )
-    beliefs_precision_t = jnp.stack(
+    beliefs_precision = jnp.stack(
         [agent_data["precisions_belief"] for agent_data in all_agent_data.values()]
     )
     agent_pref_mean = jnp.stack(
@@ -121,10 +121,10 @@ def _get_pref_belief_gap(all_agent_data: dict) -> ArrayLike:
 
     # Calculate dissatisfaction
     pref_belief_gap = kl_divergence(
-        beliefs_mean_t,
-        beliefs_precision_t,
         agent_pref_mean,
         agent_pref_precision,
+        beliefs_mean,
+        beliefs_precision,
     )
 
     # Sum (return without sum if you want kl per prefence)

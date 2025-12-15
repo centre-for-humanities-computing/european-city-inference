@@ -13,14 +13,13 @@ def _sample_choice(
 
     Parameters
     ----------
-    key: jax.random.PRNGKey
+    key:
         The JAX Pseudo-Random Number Generator key for sampling.
-    preferences: ArrayLike (float)
+    preferences:
         The preferences for each option.
 
     Returns
     -------
-    tuple[ArrayLike, ArrayLike]
         vote: An array of chosen option.
         softmax_probs: The resulting softmax probability distribution.
     """
@@ -37,8 +36,8 @@ def _sample_choice(
 # TODO: How to remove the loops for each candidate (to git the function)
 def _compute_option_preferences(
     env,
-    beliefs_mean: ArrayLike,
-    beliefs_precision: ArrayLike,
+    preference_means: ArrayLike,
+    preference_precisions: ArrayLike,
     pref_belief_gap: ArrayLike,
 ) -> ArrayLike:
     """Evaluate the preference score for each possible choice.
@@ -60,20 +59,21 @@ def _compute_option_preferences(
     candidate_preferences_per_agent = []
     candidate_list = [(c.policy["mean"], c.policy["precision"]) for c in env.candidates]
 
+    # TODO: Changer les beliefs_mean/precision avec préférence des agents
     for mean_policy, precision_policy in candidate_list:
         # Calculate KL for all agents against this one candidate
-        belief_policy_gap = kl_divergence(
-            beliefs_mean,
-            beliefs_precision,
+        preference_policy_gap = kl_divergence(
+            preference_means,  # preference
+            preference_precisions,  # preference
             mean_policy.reshape(-1),
             precision_policy.reshape(-1),
         )
 
         # Sum over preferences
-        belief_policy_gap = jnp.sum(belief_policy_gap, axis=1)
+        preference_policy_gap = jnp.sum(preference_policy_gap, axis=1)
 
         # agent prefer choice what reduce their preference_belief gap
-        preference_score_per_agent = pref_belief_gap - belief_policy_gap
+        preference_score_per_agent = pref_belief_gap - preference_policy_gap
         candidate_preferences_per_agent.append(preference_score_per_agent)
 
     # Stack the candidate scores

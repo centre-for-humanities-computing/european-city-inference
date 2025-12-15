@@ -15,18 +15,18 @@ def _vote_plurality(env, key, *args, **kwargs) -> dict:
     pref_belief_gap = _get_pref_belief_gap(all_agent_data)
 
     # TODO: Do this part into a function.
-    means_belief = jnp.stack(
-        [agent_data["means_belief"] for agent_data in all_agent_data.values()]
+    means_preference = jnp.stack(
+        [agent_data["means_preference"] for agent_data in all_agent_data.values()]
     )
-    precisions_belief = jnp.stack(
-        [agent_data["precisions_belief"] for agent_data in all_agent_data.values()]
+    precision_preference = jnp.stack(
+        [agent_data["precision_preference"] for agent_data in all_agent_data.values()]
     )
 
     # Evaluate candidate scores for each agent
     candidate_preferences = _compute_option_preferences(
         env,
-        means_belief,
-        precisions_belief,
+        means_preference,
+        precision_preference,
         pref_belief_gap,
     )
 

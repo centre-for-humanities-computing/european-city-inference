@@ -52,7 +52,7 @@ class Environment:
         """Generate and returns a unique ID for a new agent."""
         agent_id = self.next_agent_id
         self.next_agent_id += 1
-        return agent_id
+        return agent_id - 1
 
     def _create_voters(self, num_voters: int) -> None:
         """Create Voters with random preferences in a vectorized way."""

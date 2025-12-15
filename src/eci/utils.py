@@ -7,10 +7,10 @@ from scipy.stats import halfnorm, norm
 
 
 def kl_divergence(
-    mean_belief: ArrayLike,
-    precision_belief: ArrayLike,
     mean_pref: ArrayLike,
     precision_pref: ArrayLike,
+    mean_belief: ArrayLike,
+    precision_belief: ArrayLike,
 ) -> ArrayLike:
     """Calculate the KL divergence between two Gaussian distributions."""
     # Conversion to JAX arrays for broadcasting
