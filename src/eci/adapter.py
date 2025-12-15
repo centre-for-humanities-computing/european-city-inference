@@ -20,7 +20,7 @@ class SimulationAdapter:
             for p_idx, (m, p) in enumerate(
                 zip(c.policy["mean"], c.policy["precision"])
             ):
-                pdf = norm.pdf(x_vals, loc=m, scale=1 / np.sqrt(p))
+                pdf = norm.pdf(x_vals, loc=m, scale=p)
                 rows.extend(
                     [
                         {
@@ -39,7 +39,7 @@ class SimulationAdapter:
             for p_idx, (m, p) in enumerate(
                 zip(v.preferences["mean"], v.preferences["precision"])
             ):
-                pdf = norm.pdf(x_vals, loc=m, scale=1 / np.sqrt(p))
+                pdf = norm.pdf(x_vals, loc=m, scale=p)
                 rows.extend(
                     [
                         {

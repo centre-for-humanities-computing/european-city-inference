@@ -52,7 +52,7 @@ class Environment:
         """Generate and returns a unique ID for a new agent."""
         agent_id = self.next_agent_id
         self.next_agent_id += 1
-        return agent_id
+        return agent_id - 1
 
     def _create_voters(self, num_voters: int) -> None:
         """Create Voters with random preferences in a vectorized way."""
@@ -171,12 +171,6 @@ class Environment:
                         ][agent_idx]
                     )
 
-                    # 5. Dissatisfactions
-                    if voter.dissatisfactions is None:
-                        voter.dissatisfactions = []
-                    voter.dissatisfactions.append(
-                        self.sim_result[simulation_number]["dissatisfaction"][agent_idx]
-                    )
             elif "vote_matrix" in sim_data:
                 for agent_idx in range(len(self.voters)):
                     # Create a local reference for cleaner code
