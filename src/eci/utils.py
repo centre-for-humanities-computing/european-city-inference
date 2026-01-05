@@ -1,9 +1,13 @@
-from typing import List, Optional, Tuple
+from typing import List, Literal, Optional, Tuple
 
 import jax.numpy as jnp
 import numpy as np
 from jax.typing import ArrayLike
 from scipy.stats import halfnorm, norm
+
+# Type aliases for readability
+Params = Tuple[float, float]
+PhaseParams = Tuple[Params, Params]
 
 
 def kl_divergence(
@@ -48,93 +52,149 @@ def kl_divergence(
     return kl
 
 
+def _get_parameter_trajectory(
+    n_steps: int,
+    s_time: int,
+    r_time: int,
+    pattern: Optional[str],
+    trend_shape: str,
+    phase_params: PhaseParams,
+) -> Tuple[np.ndarray, np.ndarray]:
+    """
+    Calculate the alpha and beta parameters based on the shock pattern.
+
+    Parameters
+    ----------
+    n_steps :
+        Total number of time steps.
+    s_time :
+        Time step when the shock begins.
+    r_time :
+        Time step when recovery begins or ends.
+    pattern :
+        The pattern of the shock.
+    trend_shape :
+        The shape of the transition for 'trend' patterns.
+    phase_params :
+        Parameters for the Beta distribution (alpha, beta).
+
+    Returns
+    -------
+    alpha_t :
+        Array of alpha parameters for each time step.
+    beta_t :
+        Array of beta parameters for each time step.
+    """
+    (a1, b1), (a2, b2) = phase_params
+
+    # Initialize with normal phase parameters
+    alpha_t = np.full(n_steps, a1, dtype=float)
+    beta_t = np.full(n_steps, b1, dtype=float)
+
+    if pattern in [None, "phase"]:
+        # Shock occurs, then immediately reverts after recovery time
+        alpha_t[s_time:r_time] = a2
+        beta_t[s_time:r_time] = b2
+
+    elif pattern == "sudden":
+        # Shock occurs and persists indefinitely
+        alpha_t[s_time:] = a2
+        beta_t[s_time:] = b2
+
+    elif pattern == "trend":
+        t = np.arange(n_steps)
+        # Masks for different phases
+        mask_degrade = (t >= s_time) & (t < r_time)
+        mask_recover = t >= r_time
+
+        # 1. Degradation Phase
+        if np.any(mask_degrade):
+            prog = (t[mask_degrade] - s_time) / (r_time - s_time)
+            w = prog if trend_shape == "linear" else prog**2
+            alpha_t[mask_degrade] = a1 * (1 - w) + a2 * w
+            beta_t[mask_degrade] = b1 * (1 - w) + b2 * w
+
+        # 2. Recovery Phase
+        if np.any(mask_recover):
+            prog = (t[mask_recover] - r_time) / (n_steps - r_time)
+            w = (1 - prog) if trend_shape == "linear" else (1 - prog) ** 2
+            alpha_t[mask_recover] = a1 * (1 - w) + a2 * w
+            beta_t[mask_recover] = b1 * (1 - w) + b2 * w
+
+    return alpha_t, beta_t
+
+
 def generate_observations(
     n_nodes: int,
     n_steps: int,
     scenario: int = 1,
-    shock_pattern: Optional[str] = None,
+    shock_pattern: Optional[Literal["phase", "sudden", "trend"]] = None,
     shock_time: Optional[int] = None,
     recovery_time: Optional[int] = None,
-    trend_shape: str = "linear",
+    trend_shape: Literal["linear", "quadratic"] = "linear",
     dispersion: float = 1.0,
+    phase_params: PhaseParams = ((15.0, 1.0), (2.0, 2.0)),
+    seed: Optional[int] = None,
 ) -> np.ndarray:
-    """Generate observations for nodes."""
+    """
+    Generate synthetic observations for a set of nodes over time.
+
+    Parameters
+    ----------
+    n_nodes :
+        The number of nodes to generate data for.
+    n_steps :
+        The number of time steps (observations) per node.
+    scenario :
+        The scenario type.
+    shock_pattern :
+        The pattern of the shock.
+    shock_time :
+        Time step when the shock begins.
+    recovery_time :
+        Time step when recovery begins or ends.
+    trend_shape :
+        The shape of the transition for 'trend' patterns.
+    dispersion :
+        Multiplicative factor for the Gaussian noise added to observations.
+    phase_params :
+        Parameters for the Beta distribution (alpha, beta).
+    seed :
+        Seed for the random number generator to ensure reproducibility.
+
+    Returns
+    -------
+    Array containing the generated observations.
+    """
     if scenario not in [1, 2]:
         raise ValueError("Scenario must be 1 or 2")
+    if scenario == 2 and shock_pattern not in [None, "phase", "sudden", "trend"]:
+        raise ValueError(f"Invalid shock_pattern: {shock_pattern}")
+    rng = np.random.default_rng(seed)
 
-    if scenario == 2:
-        valid_patterns = [None, "phase", "sudden", "trend"]
-        if shock_pattern not in valid_patterns:
-            raise ValueError("Invalid shock_pattern")
+    # time logic
+    s_time = shock_time if shock_time is not None else n_steps // 3
+    r_time = recovery_time if recovery_time is not None else 2 * n_steps // 3
 
-    np.random.seed(42)
-    node_observations = []
+    # clipping
+    s_time = np.clip(s_time, 0, n_steps)
+    r_time = np.clip(r_time, s_time, n_steps)
 
-    # Parameters
-    phase1_params: tuple[float, float] = (15.0, 1.0)
-    phase2_params: tuple[float, float] = (2.0, 2.0)
-    phase3_params = phase1_params
+    # Scenario 1 is just Scenario 2 with no shock pattern (effectively)
+    pattern = shock_pattern if scenario == 2 else None
 
-    def generate_beta(params, size):
-        if size <= 0:
-            return np.array([])
-        a, b = params
-        obs = np.random.beta(a, b, size=size)
-        obs += np.random.normal(0, 0.05 * dispersion, size=size)
-        return np.clip(obs, 0, 1)
+    alpha_t, beta_t = _get_parameter_trajectory(
+        n_steps, s_time, r_time, pattern, trend_shape, phase_params
+    )
 
-    for node in range(n_nodes):
-        if scenario == 1:
-            obs = generate_beta(phase1_params, n_steps)
+    # generate observations
+    obs = rng.beta(alpha_t[:, None], beta_t[:, None], size=(n_steps, n_nodes))
 
-        else:  # Scenario 2
-            s_time = shock_time if shock_time is not None else n_steps // 3
-            r_time = recovery_time if recovery_time is not None else 2 * n_steps // 3
+    if dispersion > 0:
+        noise = rng.normal(0, 0.05 * dispersion, size=(n_steps, n_nodes))
+        obs += noise
 
-            if shock_pattern in [None, "phase"]:
-                # Normal -> Shock -> Recovery
-                p1 = generate_beta(phase1_params, s_time)
-                p2 = generate_beta(phase2_params, r_time - s_time)
-                p3 = generate_beta(phase3_params, n_steps - r_time)
-                obs = np.concatenate([p1, p2, p3])
-
-            elif shock_pattern == "sudden":
-                # Normal -> Shock (persists)
-                p1 = generate_beta(phase1_params, s_time)
-                p2 = generate_beta(phase2_params, r_time - s_time)
-                p3 = generate_beta(phase3_params, n_steps - r_time)
-                obs = np.concatenate([p1, p2, p3])
-
-            elif shock_pattern == "trend":
-                obs = np.zeros(n_steps)
-                for t in range(n_steps):
-                    # Determine phase and weight
-                    if t < s_time:
-                        params = phase1_params
-                    elif t < r_time:
-                        # Degrading
-                        progress = (t - s_time) / (r_time - s_time)
-                        weight = progress if trend_shape == "linear" else progress**2
-                        a = phase1_params[0] * (1 - weight) + phase2_params[0] * weight
-                        b = phase1_params[1] * (1 - weight) + phase2_params[1] * weight
-                        params = (a, b)
-                    else:
-                        # Recovering
-                        progress = (t - r_time) / (n_steps - r_time)
-                        weight = (
-                            1 - progress
-                            if trend_shape == "linear"
-                            else (1 - progress) ** 2
-                        )
-                        a = phase1_params[0] * weight + phase2_params[0] * (1 - weight)
-                        b = phase1_params[1] * weight + phase2_params[1] * (1 - weight)
-                        params = (a, b)
-
-                    obs[t] = generate_beta(params, 1)[0]
-
-        node_observations.append(obs)
-
-    return np.column_stack(node_observations)
+    return np.clip(obs, 0, 1)
 
 
 def generate_candidates(
@@ -143,7 +203,23 @@ def generate_candidates(
     manual_means: Optional[ArrayLike] = None,
     manual_precisions: Optional[ArrayLike] = None,
 ) -> List[Tuple[np.ndarray, np.ndarray]]:
-    """Generate candidates with preferences."""
+    """Generate candidates with preferences.
+
+    Parameters
+    ----------
+    n_candidates :
+        Number of candidates to generate.
+    n_preferences :
+        Number of preferences per candidate.
+    manual_means :
+        Optional manual means for the candidates.
+    manual_precisions :
+        Optional manual precisions for the candidates.
+
+    Returns
+    -------
+        List of tuples (means, precisions) for each candidate.
+    """
     if manual_means is not None and manual_precisions is not None:
         manual_means = np.asarray(manual_means)
         manual_precisions = np.asarray(manual_precisions)
