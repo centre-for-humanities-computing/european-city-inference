@@ -9,6 +9,7 @@ from scipy.stats import norm
 class SimulationAdapter:
     """Serves as a bridge between the Environment and SimulationVisualizer."""
 
+    # TODO: ADD BELIEF IN THE DATA
     @staticmethod
     def prepare_preference_data(env) -> pd.DataFrame:
         """Prepare preference distribution data for visualization."""

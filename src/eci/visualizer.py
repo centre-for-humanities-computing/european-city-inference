@@ -26,6 +26,7 @@ class SimulationVisualizer:
             },
         )
 
+    # TODO: ADD BELIEF OF AGENT IN THE PLOT
     def plot_preference_distributions(
         self, data: pd.DataFrame, axes: Optional[np.ndarray] = None
     ) -> Optional[Tuple[plt.Figure, np.ndarray]]:
@@ -77,7 +78,7 @@ class SimulationVisualizer:
                             v_data["x"],
                             v_data["pdf"],
                             color="black",
-                            alpha=0.2,
+                            alpha=0.03,
                             label="Voters" if i == 0 else "",
                         )
                 ax.set(title=pref)

@@ -37,14 +37,23 @@ class Environment:
         self.winner_id: Optional[int] = None
         self.last_round1_results: Optional[Dict[Any, Any]] = None
         self.last_round2_results: Optional[Dict[Any, Any]] = None
-        network = Network()
-        network.add_nodes(kind="binary-state", n_nodes=self.num_preferences)
+
+        # network setup
+        network = Network(update_type="unbounded")
+        network.add_nodes(
+            kind="continuous-state",
+            n_nodes=self.num_preferences,
+            precision=10,
+            expected_precision=10,
+        )
         for i in range(self.num_preferences):
             network.add_nodes(value_children=i)
+            network.add_nodes(volatility_children=i)
+
         self.network = network
         self.df = None
         self.input_data = generate_observations(
-            n_nodes=self.num_preferences, n_steps=100, scenario=1
+            n_nodes=self.num_preferences, n_steps=362, scenario=2
         )
         self.winner_id = None
 
@@ -65,7 +74,7 @@ class Environment:
                 subkey2, shape=(self.num_preferences,), minval=0.4, maxval=1.0
             )
             preferences = {"mean": mean, "precision": precision}
-            tonic_volatility = np.random.normal(-3.0, 1.0)
+            tonic_volatility = np.random.normal(-2.0, 0.01)
             voter = Voter(
                 id=self._get_new_agent_id(),
                 preferences=preferences,
@@ -202,6 +211,7 @@ class Environment:
 
         return network.last_attributes, network.node_trajectories
 
+    # TODO: Could be another name like running observations
     def initialize_network(self):
         """Initialize the network attributes and trajectories."""
         all_mus, all_pis, all_volatilities = self._gather_agent_data()

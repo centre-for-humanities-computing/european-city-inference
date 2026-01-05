@@ -62,13 +62,13 @@ def _get_current_beliefs(env) -> dict:
         precisions_belief_by_preference = []
         agent_pref_means = []
         agent_pref_precisions = []
-
+        # TODO: Track node 0
         for preference_idx in env.preferences_idx:
             means_belief_by_preference.append(
                 env.last_attributes[preference_idx]["expected_mean"][agent]
             )
             precisions_belief_by_preference.append(
-                env.last_attributes[preference_idx]["precision"][agent]
+                env.last_attributes[preference_idx]["expected_precision"][agent]
             )
             agent_pref_means.append(
                 env.last_attributes[-1]["preferences"]["mean"][agent][preference_idx]

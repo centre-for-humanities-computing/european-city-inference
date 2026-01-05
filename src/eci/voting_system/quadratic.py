@@ -36,7 +36,6 @@ def _vote_quadratic(env, key, budget: float = 99.0, *args, **kwargs) -> dict:
     # Map indices back to Candidate IDs
     candidate_ids = jnp.array([c.id for c in env.candidates])
     final_winner = candidate_ids[final_winner_idx]
-
     # 4. Determine "Legacy" Vote (Agent's highest investment)
     # Used to maintain compatibility with system expecting a single choice per agent
     top_investment_indices = jnp.argmax(votes_matrix, axis=1)
