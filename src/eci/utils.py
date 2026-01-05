@@ -12,7 +12,23 @@ def kl_divergence(
     mean_belief: ArrayLike,
     precision_belief: ArrayLike,
 ) -> ArrayLike:
-    """Calculate the KL divergence between two Gaussian distributions."""
+    """Calculate the KL divergence between two Gaussian distributions.
+
+    Parameters
+    ----------
+    mean_pref :
+        Mean of the preferred distribution.
+    precision_pref :
+        Precision of the preferred distribution.
+    mean_belief :
+        Mean of the belief distribution.
+    precision_belief :
+        Precision of the belief distribution.
+
+    Returns
+    -------
+    The KL divergence between the two distributions.
+    """
     # Conversion to JAX arrays for broadcasting
     mean_belief = jnp.asarray(mean_belief)
     precision_belief = jnp.asarray(precision_belief)
