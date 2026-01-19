@@ -22,6 +22,8 @@ This project provides an agent-based model (ABM) for simulating political electi
 ├── tests/                       
 ├── pyproject.toml               # Project configuration and dependencies (uv)
 └── Makefile                     # Automation commands
+```
+
 ## Quick Start
 
 ### Installation
