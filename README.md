@@ -123,7 +123,6 @@ The simulator supports various ways to aggregate agent decisions:
 * **Quadratic Voting (`_vote_quadratic`)**: Allows voters to express the intensity of their preferences.
 * **Random Voting (`_vote_random`)**: Used as a baseline for comparison.
 
-```
 
 ## 📚 Documentation and Tutorials
 
@@ -141,3 +140,4 @@ If you use this code or data in a scientific publication, please cite:
   publisher = {GitHub},
   url       = {https://github.com/SylvainEstebe/votre_repo},
 }
+```
