@@ -22,10 +22,11 @@ class Environment:
         num_preferences: int,
     ):
         """Initialize the simulation environment."""
+        # attributes
         self.num_simulations = 1
         self.key = jax.random.PRNGKey(42)
         self.num_preferences = num_preferences
-        self.next_agent_id = 0
+        self.next_agent_id = 1
         self.num_candidates = num_candidates
         self.node_trajectories = None
         self.preferences_idx = None
@@ -37,8 +38,10 @@ class Environment:
         self.winner_id: Optional[int] = None
         self.last_round1_results: Optional[Dict[Any, Any]] = None
         self.last_round2_results: Optional[Dict[Any, Any]] = None
+        self.winner_id = None
+        self.df = None
 
-        # network setup
+        # model setup
         network = Network(update_type="unbounded")
         network.add_nodes(
             kind="continuous-state",
@@ -51,11 +54,11 @@ class Environment:
             network.add_nodes(volatility_children=i)
 
         self.network = network
-        self.df = None
+
+        # input data setup
         self.input_data = generate_observations(
             n_nodes=self.num_preferences, n_steps=362, scenario=2
         )
-        self.winner_id = None
 
     def _get_new_agent_id(self) -> int:
         """Generate and returns a unique ID for a new agent."""
@@ -202,9 +205,7 @@ class Environment:
     def create_network(self, mu, pi, tonic_volatility, network):
         """Prepare network for voting."""
         network.attributes[-1]["preferences"] = {"mean": mu, "precision": pi}
-        preferences_idx = [
-            network.edges[idx].value_parents[0] for idx in network.input_idxs
-        ]
+        preferences_idx = network.input_idxs
         for idx in preferences_idx:
             network.attributes[idx]["tonic_volatility"] = tonic_volatility
         network.input_data(input_data=self.input_data)
@@ -219,9 +220,7 @@ class Environment:
         self.last_attributes, self.node_trajectories = vmap(vmap_create_net)(
             all_mus, all_pis, all_volatilities
         )
-        self.preferences_idx = [
-            self.network.edges[idx].value_parents[0] for idx in self.network.input_idxs
-        ]
+        self.preferences_idx = self.network.input_idxs
         for agent_idx in range(self.voters.__len__()):
             self.agents[agent_idx].trajectory = self.node_trajectories[0]
 

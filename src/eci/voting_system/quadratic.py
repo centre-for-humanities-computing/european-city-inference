@@ -2,7 +2,6 @@ import jax
 import jax.numpy as jnp
 from jax.typing import ArrayLike
 
-# Ensure these imports match your project structure
 from eci.voting_system.beliefs import _get_current_beliefs, _get_pref_belief_gap
 from eci.voting_system.decisions import _compute_option_preferences, _sample_choice
 
@@ -78,16 +77,15 @@ def _compute_sequential_qv_allocation(
 
     Parameters
     ----------
-    key : jax.random.PRNGKey
+    key :
         The random key for sampling choices.
-    candidate_preferences : ArrayLike
+    candidate_preferences :
         Matrix (n_agents, n_candidates) of preference scores.
-    budget : float
+    budget :
         Total credits to distribute per agent.
 
     Returns
     -------
-    tuple[ArrayLike, ArrayLike]
         votes_matrix : The final votes (sqrt(credits_spent)).
         credits_spent : The raw matrix of credits allocated.
     """

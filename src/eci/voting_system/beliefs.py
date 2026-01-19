@@ -6,32 +6,32 @@ from eci.utils import (
 )
 
 
-# TODO: the policy data are process twice
 def _extract_candidates_data(env) -> tuple[ArrayLike, ArrayLike]:
     """
-    Extract and stack policy data for all candidates into vectorized arrays.
+    Extract and stack policy data for all candidates.
 
     Parameters
     ----------
-    env : object
+    env :
         The environment object containing the list of candidates.
 
     Returns
     -------
-    candidates_mean_stack : ArrayLike
-        A JAX array of shape ``(n_candidates, n_preferences)`` containing
+    candidates_mean_stack :
         the mean policy values for all candidates.
     candidates_precision_stack : ArrayLike
-        A JAX array of shape ``(n_candidates, n_preferences)`` containing
         the precision policy values for all candidates.
     """
+    # Initialize lists
     c_means = []
     c_precisions = []
 
+    # Loop through candidates and extract policy data
     for c in env.candidates:
         c_means.append(c.policy["mean"].reshape(-1))
         c_precisions.append(c.policy["precision"].reshape(-1))
 
+    # Stack the lists into arrays
     candidates_mean_stack = jnp.array(c_means)
     candidates_precision_stack = jnp.array(c_precisions)
 
@@ -44,25 +44,27 @@ def _get_current_beliefs(env) -> dict:
 
     Parameters
     ----------
-    env : object
+    env :
         The environment object.
 
     Returns
     -------
-    all_agent_data : dict
-        A dictionary where keys are agent indices (int) and values are dictionaries
-        containing JAX arrays of the agent's data:
+    all_agent_data :
+        dictionary containing beliefs, preferences, and policy data.
     """
+    # Initialize dictionary to hold all agent data
     all_agent_data = {}
 
+    # Extract candidate policy data
     policy_mean, policy_prec = _extract_candidates_data(env)
 
+    # Loop through each agent
     for agent in range(len(env.voters)):
         means_belief_by_preference = []
         precisions_belief_by_preference = []
         agent_pref_means = []
         agent_pref_precisions = []
-        # TODO: Track node 0
+        # Loop through each preference index for the agent
         for preference_idx in env.preferences_idx:
             means_belief_by_preference.append(
                 env.last_attributes[preference_idx]["expected_mean"][agent]
@@ -97,13 +99,12 @@ def _get_pref_belief_gap(all_agent_data: dict) -> ArrayLike:
 
     Parameters
     ----------
-    all_agent_data : dict
+    all_agent_data :
 
     Returns
     -------
-    pref_belief_gap : ArrayLike
-        A JAX array of shape ``(n_agents,)`` representing the total dissatisfaction
-        (divergence) for each agent given their current beliefs.
+    pref_belief_gap :
+        The computed preference-belief gap for each agent.
     """
     # Extract and stack arrays from each agent
     beliefs_mean = jnp.stack(
