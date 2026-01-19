@@ -55,7 +55,7 @@ class SimulationVisualizer:
 
             if axes is None:
                 fig, axes = plt.subplots(
-                    len(prefs), 1, figsize=(12, 5 * len(prefs)), sharex=True
+                    len(prefs), 1, figsize=(10, 5 * len(prefs)), sharex=True
                 )
             else:
                 axes = np.atleast_1d(axes)
@@ -82,7 +82,7 @@ class SimulationVisualizer:
                             label="Voters" if i == 0 else "",
                         )
                 ax.set(title=pref)
-                ax.legend(loc="upper right")
+                ax.legend()
 
             fig.tight_layout()
             return fig, axes

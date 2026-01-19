@@ -6,10 +6,9 @@ from eci.voting_system.decisions import _sample_choice
 
 
 def _vote_random(env, key, *args, **kwargs) -> dict:
-    """Perform a completely random vote for each agent."""
+    """Perform random vote for each agent."""
     num_agents = len(env.voters)
     num_candidates = len(env.candidates)
-
     random_preferences = jnp.zeros((num_agents, num_candidates))
 
     # --- ROUND 1 ---
@@ -17,7 +16,6 @@ def _vote_random(env, key, *args, **kwargs) -> dict:
     # Split the JAX key
     key_round_1, key_round_2 = jax.random.split(key)
 
-    # Create mask for round 1 (all candidates are eligible)
     # Create mask for round 1 (all candidates are eligible)
     mask_round_1 = jnp.ones_like(random_preferences, dtype=bool)
     masked_preferences = jnp.where(mask_round_1, random_preferences, -jnp.inf)

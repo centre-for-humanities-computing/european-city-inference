@@ -1,7 +1,6 @@
 from .beliefs import _get_current_beliefs, _get_pref_belief_gap
 from .decisions import (
     _compute_option_preferences,
-    _compute_option_preferences_baseline,
     _sample_choice,
 )
 from .plurality import _vote_plurality
@@ -16,5 +15,4 @@ __all__ = [
     "_compute_option_preferences",
     "_get_current_beliefs",
     "_get_pref_belief_gap",
-    "_compute_option_preferences_baseline",
 ]

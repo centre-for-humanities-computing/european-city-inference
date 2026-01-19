@@ -13,7 +13,7 @@ class Agent(ABC):
 
     Attributes
     ----------
-    id : int
+    id :
         The agent's unique identifier.
     """
 
@@ -44,31 +44,31 @@ class Voter(Agent):
 
     Attributes
     ----------
-    id : int
+    id :
         The agent's unique identifier.
-    preferences : Dict[str, Any]
+    preferences :
         The voter's preferences, typically containing 'mean' and
         'precision' vectors.
-    tonic_volatility : float
+    tonic_volatility :
         A parameter representing the voter's baseline level of choice volatility.
-    budget : float, optional
+    budget :
         The voter's budget for influencing their decision, by default 100.0.
-    perceived_outcome : Optional[np.ndarray], optional
+    perceived_outcome :
         The voter's perception of the election outcome, used for Theory of Mind,
         by default None.
-    vote_round_1 : Optional[Union[int, np.ndarray, List[int]]], optional
+    vote_round_1 :
         The voter's choice in the first round of voting, by default None.
-    vote_round_2 : Optional[Union[int, np.ndarray, List[int]]], optional
+    vote_round_2 :
         The voter's choice in the second round of voting, by default None.
-    softmax_probs_1 : Optional[Dict[int, float]], optional
+    softmax_probs_1 :
         The softmax probabilities for the first round of voting.
-    softmax_probs_2 : Optional[Dict[int, float]], optional
+    softmax_probs_2 :
         The softmax probabilities for the second round of voting.
-    dissatisfactions : Optional[Dict[int, float]], optional
+    dissatisfactions :
         The voter's dissatisfaction levels.
-    trajectory : Optional[Any], optional
+    trajectory :
         The voter's trajectory data, by default None.
-    observation: Optional[Any], optional
+    observation:
         The voter's observation data, by default None.
     """
 
@@ -116,12 +116,12 @@ class Candidate(Agent):
 
     Attributes
     ----------
-    id : int
+    id :
         The agent's unique identifier.
-    policy : Dict[str, Any]
+    policy :
         The candidate's policy platform, typically including 'mean' and
         'precision' vectors.
-    vote_count : int
+    vote_count :
         A simple counter for votes. Note: The official tally is managed
         by the `VotingSystem`.
     """
@@ -136,7 +136,7 @@ class Candidate(Agent):
 
         Parameters
         ----------
-        environment : Any
+        environment :
             The environment in which the agent exists, providing access to
             global state, voter data, and other agents.
 
