@@ -51,7 +51,7 @@ from eci.environment import Environment
 # 1. Define the dimensions of the simulation
 NUM_VOTERS = 200        # Total number of voters
 NUM_CANDIDATES = 6      # Total number of candidates running
-NUM_PREFERENCES = 6     # Number of policy dimensions (e.g., Economy, Social, etc.)
+NUM_PREFERENCES = 4     # Number of policy dimensions (e.g., Economy, Social, etc.)
 
 # Set the number of simulation
 NUM_SIMULATIONS = 100
@@ -80,7 +80,7 @@ import jax.numpy as jnp
 
 # We loop through the first 5 voters and give them specific preferences
 for i in range(5):
-    env.voters[i].preferences["mean"] = jnp.array([-1.0, -1.0, -1.0, -1.0])
+    env.voters[i].preferences["mean"] = jnp.array([-1.0, -1.0, -1.0, -1.0]) # Important, the shape of preferences should match the number decided in parameters
     
     # Higher value = higher certainty
     env.voters[i].preferences["precision"] = jnp.array([0.4, 0.2, 0.6, 0.2])
@@ -123,34 +123,17 @@ The simulator supports various ways to aggregate agent decisions:
 * **Quadratic Voting (`_vote_quadratic`)**: Allows voters to express the intensity of their preferences.
 * **Random Voting (`_vote_random`)**: Used as a baseline for comparison.
 
----
-
-### 4. Plot Results 
-
-The simulation setup involves defining how many time steps (or trajectories) the agents will experience. You also initialize the **Adapter** (handles data) and **Visualizer** (handles plotting).
-
-**Code:**
-
-
-```python
-from eci.adapter import SimulationAdapter
-from eci.visualizer import SimulationVisualizer
-
-# 2. Initialize helpers
-viz = SimulationVisualizer()  # For plotting graphs
-adapter = SimulationAdapter() # For processing simulation data
-
 ```
 
 ## 📚 Documentation and Tutorials
 
-> **Note:** Full official documentation and detailed interactive tutorials are currently being drafted and will be available very soon to guide you.
+> **Note:** Full official documentation and detailed interactive tutorials are currently being drafted and will be available very soon.
 > 
-
-```
 
 If you use this code or data in a scientific publication, please cite:
 
+
+```
 @software{political_abm2025,
   author    = {Sylvain Estebe, Nicolas Legrand},
   title     = {collective decision-making in volatile political environments using quadratic voting}, 
