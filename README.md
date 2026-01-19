@@ -4,24 +4,24 @@ This project provides an agent-based model (ABM) for simulating political electi
 
 ## Project Structure
 
-├── src/                  
+```text
+├── src/
 │   ├── eci/
-        ├── voting_system/
-        ├── beliefs.py
-        ├── decision.py
-        ├── plurality.py
-        ├── quadratic.py
-        ├── random voting.py
-│   ├── adapter.py        
-│   ├── agents.py 
-    ├── environement.py  
-    ├── utils.py
-    └── visualizer.py    
-├── notebooks/            # Jupyter notebooks for step-by-step learning
-├── tests/            # Jupyter notebooks for step-by-step learning
-├── pyproject.toml        # Dependencies (uv)
-└── Makefile              # Automation commands
-
+│   │   └── voting_system/       # Core voting logic and mechanisms
+│   │       ├── beliefs.py       # Handling agent beliefs and preferences
+│   │       ├── decision.py      # Decision-making algorithms
+│   │       ├── plurality.py     # Plurality voting implementation
+│   │       ├── quadratic.py     # Quadratic voting implementation
+│   │       └── random_voting.py # Randomized voting for baseline comparisons
+│   ├── adapter.py               # Adapters for data transformation/interfaces
+│   ├── agents.py                # Agent definitions and behaviors
+│   ├── environment.py           # Simulation environment logic
+│   ├── utils.py                 # Helper functions and shared utilities
+│   └── visualizer.py            # Tools for rendering simulation results
+├── notebooks/                   # Tutorials
+├── tests/                       
+├── pyproject.toml               # Project configuration and dependencies (uv)
+└── Makefile                     # Automation commands
 ## Quick Start
 
 ### Installation
