@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-from eci.visualizer import SimulationVisualizer
+from eci.plots import SimulationVisualizer
 
 
 class TestSimulationVisualizer(unittest.TestCase):

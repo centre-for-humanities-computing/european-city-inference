@@ -2,124 +2,82 @@ import jax
 import jax.numpy as jnp
 from jax.typing import ArrayLike
 
-from eci.voting_system.beliefs import _get_current_beliefs, _get_pref_belief_gap
-from eci.voting_system.decisions import _compute_option_preferences, _sample_choice
+from eci.utils import _extract_env_data_vectorized
+from eci.voting_system.decisions import _compute_preferences, _sample_choice
 
 
 def _vote_quadratic(env, key, budget: float = 99.0, *args, **kwargs) -> dict:
-    """Orchestrates the Quadratic Voting process within the simulation."""
-    # 1. Retrieve beliefs and compute preferences
-    all_agent_data = _get_current_beliefs(env)
-    pref_belief_gap = _get_pref_belief_gap(all_agent_data)
-    # TODO: Do this part into a function.
-    means_preference = jnp.stack(
-        [agent_data["means_preference"] for agent_data in all_agent_data.values()]
-    )
-    precision_preference = jnp.stack(
-        [agent_data["precision_preference"] for agent_data in all_agent_data.values()]
-    )
+    """Quadratic Voting process."""
+    # Extract all agent beliefs and preferences
+    agent_data = _extract_env_data_vectorized(env)
 
-    candidate_preferences = _compute_option_preferences(
-        env, means_preference, precision_preference, pref_belief_gap
-    )
+    # Evaluate candidate scores for each agent
+    candidate_preferences = _compute_preferences(agent_data)
+    candidate_ids = jnp.array([c.id for c in env.candidates])
 
-    # 2. Perform sequential Quadratic Voting allocation
+    # Allocation QV
     votes_matrix, credits_spent = _compute_sequential_qv_allocation(
         key, candidate_preferences, budget
     )
 
-    # 3. Determine Final Winner (Sum of SQRT votes)
+    # Compute final winner
     total_votes = jnp.sum(votes_matrix, axis=0)
     final_winner_idx = jnp.argmax(total_votes)
-
-    # Map indices back to Candidate IDs
-    candidate_ids = jnp.array([c.id for c in env.candidates])
     final_winner = candidate_ids[final_winner_idx]
-    # 4. Determine "Legacy" Vote (Agent's highest investment)
-    # Used to maintain compatibility with system expecting a single choice per agent
+
     top_investment_indices = jnp.argmax(votes_matrix, axis=1)
     vote_choice_legacy = candidate_ids[top_investment_indices]
 
-    # 5. Determine Top 2 Winners (for Round 2 simulation)
+    row_sums = jnp.sum(votes_matrix, axis=1, keepdims=True)
+    safe_row_sums = jnp.where(row_sums == 0, 1.0, row_sums)  # Évite division par 0
+    pseudo_probs = votes_matrix / safe_row_sums
+
     sorted_indices = jnp.argsort(total_votes)[::-1]
     top_two_indices = sorted_indices[:2]
     top_two_winners = candidate_ids[top_two_indices]
 
-    # Pad if fewer than 2 candidates exist
     if top_two_winners.shape[0] < 2:
         top_two_winners = jnp.pad(
             top_two_winners, (0, 2 - top_two_winners.shape[0]), mode="edge"
         )
 
     return {
-        # --- Round 1 Simulation (Allocation) ---
+        # round 1
         "vote_round_1": vote_choice_legacy,
-        "softmax_probs_round_1": jnp.zeros_like(vote_choice_legacy, dtype=float),
+        "softmax_probs_round_1": pseudo_probs,
         "first_round_winners": top_two_winners,
-        # --- Round 2 Simulation (Final Tally) ---
+        # round 2 (duplicata)
         "vote_final_round_2": vote_choice_legacy,
-        "softmax_probs_final_round_2": jnp.zeros_like(vote_choice_legacy, dtype=float),
+        "softmax_probs_final_round_2": pseudo_probs,
         "final_winner": final_winner,
-        # --- QV Specific Data ---
+        # qv data specific
         "total_votes_per_candidate": total_votes,
         "credits_spent": credits_spent,
+        "qv_votes_matrix": votes_matrix,
     }
 
 
 def _compute_sequential_qv_allocation(
     key: jax.random.PRNGKey, candidate_preferences: ArrayLike, budget: float
 ) -> tuple[ArrayLike, ArrayLike]:
-    """
-    Allocates budget sequentially across the top 5 choices without replacement.
-
-    Agents sample their top choice, allocate a weighted portion of the budget,
-    remove that choice from consideration, and repeat.
-
-    Parameters
-    ----------
-    key :
-        The random key for sampling choices.
-    candidate_preferences :
-        Matrix (n_agents, n_candidates) of preference scores.
-    budget :
-        Total credits to distribute per agent.
-
-    Returns
-    -------
-        votes_matrix : The final votes (sqrt(credits_spent)).
-        credits_spent : The raw matrix of credits allocated.
-    """
+    """Allocates budget and returns INTEGER votes."""
     num_agents, num_candidates = candidate_preferences.shape
 
-    # Define budget distribution weights for the top 5 picks
+    # Weights strategy
     weights = jnp.array([0.50, 0.25, 0.15, 0.07, 0.03])
-    # Normalize weights to ensure exact budget exhaustion
     weights = (weights / jnp.sum(weights)) * budget
 
-    # Initialize state
     credits_spent = jnp.zeros((num_agents, num_candidates))
     current_prefs = candidate_preferences
-
-    # Split key for 5 stochastic sampling steps
     keys = jax.random.split(key, 5)
 
-    # Unrolled loop for top 5 selection
     for i in range(5):
-        # 1. Sample choice based on current preferences
-        # Assumes _sample_choice returns (indices, probs)
         choice_indices, _ = _sample_choice(keys[i], current_prefs)
-
-        # 2. Create one-hot mask for the selected candidate
         choice_one_hot = jax.nn.one_hot(choice_indices, num_candidates)
-
-        # 3. Allocate budget according to current rank weight
         credits_spent = credits_spent + (choice_one_hot * weights[i])
-
-        # 4. Remove selected choice for next iteration (Sampling without replacement)
-        # Subtracting a large value pushes Softmax prob to ~0
         current_prefs = current_prefs - (choice_one_hot * 1e9)
 
-    # Apply Quadratic Voting rule: Votes = sqrt(Credits)
-    votes_matrix = jnp.sqrt(credits_spent)
+    # Convert credits spent to integer votes using quadratic cost
+    votes_matrix = jnp.floor(jnp.sqrt(credits_spent)).astype(jnp.int32)
 
     return votes_matrix, credits_spent

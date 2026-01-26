@@ -111,3 +111,46 @@ class SimulationAdapter:
             ),
             "title_suffix": f"for Voter {voter_id}",
         }
+
+    @staticmethod
+    def process_simulation_results(simulations: List[Dict[str, Any]]) -> pd.DataFrame:
+        """Process raw simulation results into a DataFrame suitable for analysis."""
+        all_votes = []
+        for sim in simulations:
+            all_votes.extend(sim.get("vote_round_1", []))
+            all_votes.extend(sim.get("vote_final_round_2", []))
+
+        # Ensure we cover all candidates that appeared
+        all_candidates = np.unique(all_votes)
+
+        data_list = []
+        for i, sim_data in enumerate(simulations):
+            winner = sim_data.get("final_winner")
+
+            for round_name, round_key in [
+                ("Tour 1", "vote_round_1"),
+                ("Tour 2", "vote_round_2"),
+            ]:
+                votes = np.array(sim_data.get(round_key, []))
+
+                # Robustly calculate proportions
+                if len(votes) == 0:
+                    continue
+
+                unique, counts = np.unique(votes, return_counts=True)
+                counts_map = dict(zip(unique, counts))
+                total_votes = len(votes)
+
+                for cand in all_candidates:
+                    prop = counts_map.get(cand, 0) / total_votes
+                    data_list.append(
+                        {
+                            "simulation": i,
+                            "candidat": cand,
+                            "proportion": prop,
+                            "round": round_name,
+                            "a_gagne_final": (cand == winner),
+                        }
+                    )
+
+        return pd.DataFrame(data_list)

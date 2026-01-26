@@ -1,3 +1,7 @@
+[build-system]
+requires = ["uv_build>=0.9.21,<0.10.0"]
+build-backend = "uv_build"
+
 [project]
 name = "eci"
 version = "0.1.0"
@@ -8,38 +12,44 @@ authors = [
     { name = "Sylvain Estebe", email = "sylvainestebe@cas.au.dk" },
     { name = "Nicolas Legrand", email = "nicolas.legrand@cas.au.dk" },
 ]
+
 dependencies = [
-    "ipykernel>=6.29.5",
+    "jax>=0.4.30",
+    "jaxlib>=0.4.30",
     "matplotlib>=3.10.3",
     "networkx>=3.5",
     "numpy>=2.3.0",
     "pandas>=2.3.0",
     "pyhgf>=0.2.7",
-    "pytest>=8.4.2",
     "seaborn>=0.13.2",
-    "pre-commit>=4.3.0",
-    "ipython>=9.6.0",
-    "jupyter>=1.1.1",
-    "watermark",
-    "ruff",
-    "pytest-cov",
     "pingouin>=0.5.5",
     "importlib>=1.0.4",
-    "marimo>=0.18.2",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.4.2",
+    "pytest-cov",
     "pytest-mock>=3.15.1",
+    "ruff",
+    "pre-commit>=4.3.0",
+    "ipykernel>=6.29.5",
+    "ipython>=9.6.0",
+    "jupyter>=1.1.1",
+    "marimo>=0.18.2",
+    "watermark",
 ]
 
 [tool.ruff]
 extend-include = ["*.ipynb"]
 
 [tool.ruff.lint]
-# E = pycodestyle (erreurs), F = pyflakes (erreurs logiques), W = pycodestyle (warnings)
-# I = isort (tri des imports), D = pydocstyle (docstrings)
+# E/W = pycodestyle, F = pyflakes, I = isort, D = pydocstyle
 select = ["E", "F", "W", "I", "D"]
 ignore = [
-    "D100", # Ignore "Missing docstring in public module"
-    "D104", # Ignore "Missing docstring in public package"
-    "D107", # Ignore "Missing docstring in __init__"
+    "D100", # Missing docstring in public module
+    "D104", # Missing docstring in public package
+    "D107", # Missing docstring in __init__
 ]
 
 [tool.ruff.lint.pydocstyle]

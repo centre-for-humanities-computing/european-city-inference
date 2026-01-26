@@ -2,9 +2,9 @@ import jax
 import jax.numpy as jnp
 from jax.typing import ArrayLike
 
-from eci.voting_system.beliefs import _get_current_beliefs, _get_pref_belief_gap
+from eci.utils import _extract_env_data_vectorized
 from eci.voting_system.decisions import (
-    _compute_option_preferences,
+    _compute_preferences,
     _sample_choice,
 )
 
@@ -12,26 +12,10 @@ from eci.voting_system.decisions import (
 def _vote_plurality(env, key, *args, **kwargs) -> dict:
     """Perform plurality vote for each agent."""
     # Extract all agent beliefs and preferences
-    all_agent_data = _get_current_beliefs(env)
-
-    # Get dissatifaction (gap between preference and belief) per agent
-    pref_belief_gap = _get_pref_belief_gap(all_agent_data)
-
-    # TODO: Do this part into a function.
-    means_preference = jnp.stack(
-        [agent_data["means_preference"] for agent_data in all_agent_data.values()]
-    )
-    precision_preference = jnp.stack(
-        [agent_data["precision_preference"] for agent_data in all_agent_data.values()]
-    )
+    agent_data = _extract_env_data_vectorized(env)
 
     # Evaluate candidate scores for each agent
-    candidate_preferences = _compute_option_preferences(
-        env,
-        means_preference,
-        precision_preference,
-        pref_belief_gap,
-    )
+    candidate_preferences = _compute_preferences(agent_data)
 
     # --- ROUND 1 ---
 
@@ -46,7 +30,7 @@ def _vote_plurality(env, key, *args, **kwargs) -> dict:
     vote_1, softmax_probs_1 = _sample_choice(key_round_1, masked_preferences)
 
     # Find the top two winners from round 1
-    top_two_winners = _find_top_two_winners(vote_1)
+    top_two_winners = _find_top_two_winners(vote_1, candidate_preferences.shape[1])
 
     # --- ROUND 2 ---
 
@@ -60,7 +44,7 @@ def _vote_plurality(env, key, *args, **kwargs) -> dict:
     vote_2, softmax_probs_2 = _sample_choice(key_round_2, masked_preferences)
 
     # Find the final winner (most votes in round 2)
-    final_winner = _find_top_two_winners(vote_2)[0]
+    final_winner = _find_top_two_winners(vote_2, candidate_preferences.shape[1])[0]
 
     # --- RESULTS ---
     return {
@@ -75,39 +59,42 @@ def _vote_plurality(env, key, *args, **kwargs) -> dict:
     }
 
 
-def _find_top_two_winners(votes_array: ArrayLike) -> ArrayLike:
+def _find_top_two_winners(votes_array: ArrayLike, num_candidates: int) -> ArrayLike:
     """Find two candidates with the most votes."""
     # Count votes for each unique candidate
-    unique_candidates, counts = jnp.unique(votes_array, return_counts=True)
+    counts = jnp.bincount(votes_array.astype(jnp.int32), length=num_candidates)
 
     # Get indices that would sort the counts in ascending order
-    sorted_indices = jnp.argsort(counts)
-
-    # Take the last two indices (top 2 counts) and reverse them
-    top_two_indices = sorted_indices[-2:][::-1]
-
-    # Get the corresponding candidates
-    top_two_winners = unique_candidates[top_two_indices]
-
-    num_winners = top_two_winners.shape[0]
-    if num_winners < 2:
-        return jnp.pad(top_two_winners, (0, 2 - num_winners), mode="edge")
+    _, top_two_winners = jax.lax.top_k(counts, k=2)
 
     return top_two_winners
 
 
-def _update_public_poll(self, vote_counts: dict) -> None:
+############# Public Poll Update IN CONSTRUCTION  #############
+def _compute_poll_results(votes: jnp.ndarray, num_candidates: int) -> jnp.ndarray:
+    """Calculate vote proportions."""
+    # 1. Count votes for every candidate ID (0 to num_candidates-1)
+    # This is much faster than a Python loop over a dictionary
+    vote_counts = jnp.bincount(votes, length=num_candidates)
+
+    # 2. Calculate proportions
+    total_votes = votes.shape[0]
+
+    # We use jnp.where to handle the edge case of 0 votes safely
+    return jnp.where(total_votes > 0, vote_counts / total_votes, 0.0)
+
+
+# Example of how to integrate it into your class method
+def update_public_poll(self, votes: jnp.ndarray):
     """Update the public poll with the latest election results."""
-    if not self.use_theory_of_mind or not vote_counts:
+    if not self.use_theory_of_mind:
         return
 
-    total_votes = sum(vote_counts.values())
-    if total_votes == 0:
-        return
+    # num_candidates must be known (static)
+    num_candidates = len(self.candidates)
 
-    # Create a vector of vote proportions from the results dict
-    candidate_ids = [c.id for c in self.candidates]
-    self.public_poll = jnp.array(
-        [vote_counts.get(cid, 0) / total_votes for cid in candidate_ids]
-    )
+    # Compute the new poll using the JAX-native function
+    self.public_poll = _compute_poll_results(votes, num_candidates)
+
+    # Logging is fine here because this method is the entry point
     print(f"Public poll updated: {self.public_poll}")

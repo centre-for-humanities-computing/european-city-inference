@@ -94,7 +94,7 @@ class Environment:
 
     def _create_candidates(self, num_candidates: int) -> None:
         """Create Candidates with random policy platforms."""
-        for _ in range(num_candidates):
+        for i in range(num_candidates):
             self.key, subkey1, subkey2 = jax.random.split(self.key, 3)
             mean = jax.random.uniform(
                 subkey1, shape=(self.num_preferences,), minval=0, maxval=2.0
@@ -104,7 +104,7 @@ class Environment:
             )
             policy_data = {"mean": mean, "precision": precision}
             candidate = Candidate(
-                id=self._get_new_agent_id(),
+                id=i + 1,
                 policy=policy_data,
             )
             self.candidates.append(candidate)
@@ -116,11 +116,13 @@ class Environment:
         all_volatilities = jnp.array([v.tonic_volatility for v in self.voters])
         return all_mus, all_pis, all_volatilities
 
+    # ok
     def run_one_simulation(self, func, key, *args, **kwargs) -> dict:
         """Run a single simulation using the provided function and key."""
         self.sim_result = func(self, key, *args, **kwargs)
         return self.sim_result
 
+    # ok
     def run_n_simulation(self, func, key, n_simulations, *args, **kwargs) -> dict:
         """Run multiple simulations and aggregate the results."""
         # Dictionary to store the results of all n simulations
@@ -140,6 +142,7 @@ class Environment:
         # Return the dictionary containing all simulation results
         return self.sim_result
 
+    # TODO: adapt this function
     def _update_agents(self) -> None:
         """Update agents with the results from the simulations."""
         for simulation_number in self.sim_result.keys():
@@ -202,7 +205,8 @@ class Environment:
                         self.sim_result[simulation_number]["dissatisfaction"][agent_idx]
                     )
 
-    def create_network(self, mu, pi, tonic_volatility, network):
+    # TODO:  This has to be checked / tested and simplified for JAX
+    def _run_single_agent_inference(self, mu, pi, tonic_volatility, network):
         """Prepare network for voting."""
         network.attributes[-1]["preferences"] = {"mean": mu, "precision": pi}
         preferences_idx = network.input_idxs
@@ -212,11 +216,12 @@ class Environment:
 
         return network.last_attributes, network.node_trajectories
 
-    # TODO: Could be another name like running observations
-    def initialize_network(self):
+    def _run_multi_agent_inference(self):
         """Initialize the network attributes and trajectories."""
         all_mus, all_pis, all_volatilities = self._gather_agent_data()
-        vmap_create_net = Partial(self.create_network, network=self.network)
+        vmap_create_net = Partial(
+            self._run_single_agent_inference, network=self.network
+        )
         self.last_attributes, self.node_trajectories = vmap(vmap_create_net)(
             all_mus, all_pis, all_volatilities
         )
@@ -224,6 +229,7 @@ class Environment:
         for agent_idx in range(self.voters.__len__()):
             self.agents[agent_idx].trajectory = self.node_trajectories[0]
 
+    # TODO: This could be remove and be part of utils
     def get_winners(self, vote_list, top_n):
         """Determine the top N winners from a list of votes."""
         clean_votes = [v.item() if hasattr(v, "item") else v for v in vote_list]

@@ -245,3 +245,66 @@ def generate_candidates(
             pis = halfnorm.rvs(scale=sigma_scale, size=n_preferences)
             candidates.append((mus, pis))
     return candidates
+
+
+def get_voter_trajectory_data(env, voter_id: int, pref_idx: int = 0):
+    """Retrieve specific arrays for a single voter's belief trajectory."""
+    voter = next(v for v in env.voters if v.id == voter_id)
+    return {
+        "means": voter.trajectory["expected_mean"][voter.id],
+        "precisions": voter.trajectory["precision"][voter.id],
+        "observations": env.input_data[:, pref_idx],
+        "preference_params": (
+            voter.preferences["mean"][pref_idx],
+            voter.preferences["precision"][pref_idx],
+        ),
+        "title_suffix": f"for Voter {voter_id}",
+    }
+
+
+def _extract_env_data_vectorized(env):
+    """
+    Extract and vectorize belief, preference, and policy data from the environment.
+
+    This function transforms the environment's agent and candidate data into
+    dense JAX arrays, organized as matrices where rows typically represent
+    agents and columns represent preference dimensions.
+
+    Parameters
+    ----------
+    env :
+        The simulation environment containing agents and candidates.
+
+    Returns
+    -------
+    data : dict
+        A dictionary containing JAX arrays:
+
+    """
+    # Matrice (agent, preference)
+    pref_idx_list = env.preferences_idx
+
+    # Extract Candidate Data
+    # Shape: (n_candidates, n_features)
+    policy_means = jnp.stack([c.policy["mean"].ravel() for c in env.candidates])
+    policy_precs = jnp.stack([c.policy["precision"].ravel() for c in env.candidates])
+
+    # Extract Voter Beliefs
+    # Stack along axis -1 to ensure shape is (n_agents, n_preferences)
+    means_belief = jnp.stack(
+        [env.last_attributes[i]["expected_mean"] for i in pref_idx_list], axis=-1
+    )
+    precs_belief = jnp.stack(
+        [env.last_attributes[i]["expected_precision"] for i in pref_idx_list], axis=-1
+    )
+
+    # Extract Voter Preferences
+    p_idx_jax = jnp.array(pref_idx_list)
+    agent_pref_means = env.last_attributes[-1]["preferences"]["mean"][:, p_idx_jax]
+    agent_pref_precs = env.last_attributes[-1]["preferences"]["precision"][:, p_idx_jax]
+
+    return {
+        "beliefs": {"mean": means_belief, "precision": precs_belief},
+        "preferences": {"mean": agent_pref_means, "precision": agent_pref_precs},
+        "candidates": {"mean": policy_means, "precision": policy_precs},
+    }
