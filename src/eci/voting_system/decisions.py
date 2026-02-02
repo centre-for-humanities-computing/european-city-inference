@@ -63,4 +63,4 @@ def _compute_preferences(
     preference_score_per_agent = pref_belief_gap[:, jnp.newaxis] - pref_candidate_gap
 
     # Stack the candidate scores
-    return preference_score_per_agent
+    return preference_score_per_agent, pref_candidate_gap, pref_belief_gap

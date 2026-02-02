@@ -10,13 +10,18 @@ def _vote_random(env, key, *args, **kwargs) -> dict:
     num_agents = len(env.voters)
     num_candidates = len(env.candidates)
 
+    # Split the JAX key for random preferences and voting
+    key_prefs, key_votes = jax.random.split(key)
+
     # random candidate preference shape (agent, candidate)
-    random_preferences = jnp.zeros((num_agents, num_candidates))
+    random_preferences = jax.random.uniform(
+        key_prefs, shape=(num_agents, num_candidates)
+    )
 
     # --- ROUND 1 ---
 
     # Split the JAX key for two separate random samples
-    key_round_1, key_round_2 = jax.random.split(key)
+    key_round_1, key_round_2 = jax.random.split(key_votes)
 
     # Create mask for round 1 (all candidates are eligible)
     mask_round_1 = jnp.ones_like(random_preferences, dtype=bool)
@@ -52,6 +57,10 @@ def _vote_random(env, key, *args, **kwargs) -> dict:
         "vote_final_round_2": vote_2,
         "softmax_probs_final_round_2": softmax_probs_2,
         "final_winner": final_winner,
+        # metrics
+        "pref_candidate_gap": random_preferences,
+        "candidate_preferences": random_preferences,
+        "pref_belief_gap": random_preferences,
     }
 
 

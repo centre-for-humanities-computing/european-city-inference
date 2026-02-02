@@ -15,7 +15,9 @@ def _vote_plurality(env, key, *args, **kwargs) -> dict:
     agent_data = _extract_env_data_vectorized(env)
 
     # Evaluate candidate scores for each agent
-    candidate_preferences = _compute_preferences(agent_data)
+    candidate_preferences, pref_candidate_gap, pref_belief_gap = _compute_preferences(
+        agent_data
+    )
 
     # --- ROUND 1 ---
 
@@ -56,6 +58,10 @@ def _vote_plurality(env, key, *args, **kwargs) -> dict:
         "vote_final_round_2": vote_2,
         "softmax_probs_final_round_2": softmax_probs_2,
         "final_winner": final_winner,
+        # metrics
+        "pref_candidate_gap": pref_candidate_gap,
+        "candidate_preferences": candidate_preferences,
+        "pref_belief_gap": pref_belief_gap,
     }
 
 

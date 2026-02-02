@@ -12,7 +12,9 @@ def _vote_quadratic(env, key, budget: float = 99.0, *args, **kwargs) -> dict:
     agent_data = _extract_env_data_vectorized(env)
 
     # Evaluate candidate scores for each agent
-    candidate_preferences = _compute_preferences(agent_data)
+    candidate_preferences, pref_candidate_gap, pref_belief_gap = _compute_preferences(
+        agent_data
+    )
     candidate_ids = jnp.array([c.id for c in env.candidates])
 
     # Allocation QV
@@ -54,6 +56,9 @@ def _vote_quadratic(env, key, budget: float = 99.0, *args, **kwargs) -> dict:
         "total_votes_per_candidate": total_votes,
         "credits_spent": credits_spent,
         "qv_votes_matrix": votes_matrix,
+        "pref_candidate_gap": pref_candidate_gap,
+        "candidate_preferences": candidate_preferences,
+        "pref_belief_gap": pref_belief_gap,
     }
 
 
@@ -66,15 +71,19 @@ def _compute_sequential_qv_allocation(
     # Weights strategy
     weights = jnp.array([0.50, 0.25, 0.15, 0.07, 0.03])
     weights = (weights / jnp.sum(weights)) * budget
-
     credits_spent = jnp.zeros((num_agents, num_candidates))
     current_prefs = candidate_preferences
     keys = jax.random.split(key, 5)
 
+    # Sequentially allocate votes based on preferences
     for i in range(5):
+        # Sample choice based on current preferences
         choice_indices, _ = _sample_choice(keys[i], current_prefs)
+        # Create one-hot encoding for chosen candidates
         choice_one_hot = jax.nn.one_hot(choice_indices, num_candidates)
+        # Distribute credits spent based on weights
         credits_spent = credits_spent + (choice_one_hot * weights[i])
+        # Remove chosen candidate from current preferences
         current_prefs = current_prefs - (choice_one_hot * 1e9)
 
     # Convert credits spent to integer votes using quadratic cost
