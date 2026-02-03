@@ -1,4 +1,4 @@
-from typing import Any, ContextManager, List, Optional, Tuple
+from typing import Any, ContextManager, Optional, Tuple
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -28,94 +28,72 @@ def _get_context() -> ContextManager:
 
 def plot_preference(
     env: Any,
-    dims_to_plot: Optional[List[int]] = None,
-    auto_scale: bool = True,
-    x_range_manual: Tuple[float, float] = (-100, 100),
     ax_array: Optional[np.ndarray] = None,
 ) -> plt.Figure:
-    """Plot preference landscape with wider auto-scaling to see full distributions."""
-    # extract data
-    env_data = _extract_env_data_vectorized(env)  # Check here
+    """Plot preference distributions."""
+    # Get data
+    env_data = _extract_env_data_vectorized(env)
+    v_mu, v_pr = (
+        np.array(env_data["preferences"]["mean"]),
+        np.array(env_data["preferences"]["precision"]),
+    )
+    c_mu, c_pr = (
+        np.array(env_data["candidates"]["mean"]),
+        np.array(env_data["candidates"]["precision"]),
+    )
 
-    v_mu = np.array(env_data["preferences"]["mean"])  # (N, D)
-    v_pr = np.array(env_data["preferences"]["precision"])  # (N, D)
-    c_mu = np.array(env_data["candidates"]["mean"])  # (M, D)
-    c_pr = np.array(env_data["candidates"]["precision"])  # (M, D)
-
-    # pick dims
+    # Determine which dimensions to plot
     n_dims = v_mu.shape[1]
-    if dims_to_plot is None:
-        dims_to_plot = [0, 1] if n_dims >= 2 else list(range(n_dims))
+    dims_to_plot = [0, 1] if n_dims >= 2 else list(range(n_dims))
 
-    # calc range (wider zoom)
-    if auto_scale:
-        # calc sigmas
-        v_sig = 1.0 / np.sqrt(v_pr)
-        c_sig = 1.0 / np.sqrt(c_pr)
+    # Calculate the x-range
 
-        # get bounds (mean +/- 4 stds ensures we see tails)
-        lows = np.concatenate([(v_mu - 4 * v_sig).ravel(), (c_mu - 4 * c_sig).ravel()])
-        highs = np.concatenate([(v_mu + 4 * v_sig).ravel(), (c_mu + 4 * c_sig).ravel()])
+    v_sig, c_sig = 1.0 / np.sqrt(v_pr), 1.0 / np.sqrt(c_pr)
+    lows = np.concatenate([(v_mu - 4 * v_sig).ravel(), (c_mu - 4 * c_sig).ravel()])
+    highs = np.concatenate([(v_mu + 4 * v_sig).ravel(), (c_mu + 4 * c_sig).ravel()])
+    x = np.linspace(lows.min(), highs.max(), 500)
 
-        x = np.linspace(lows.min(), highs.max(), 500)
-    else:
-        x = np.linspace(x_range_manual[0], x_range_manual[1], 500)
-
-    # setup fig
-    n_cands = c_mu.shape[0]
+    # Setup the figure and axes for plotting
+    n_cands, n_plots = c_mu.shape[0], len(dims_to_plot)
     cand_ids = [f"C{i}" for i in range(n_cands)]
-    n_plots = len(dims_to_plot)
-
-    if ax_array is None:
-        fig, axes = plt.subplots(
-            n_plots, 1, figsize=(10, 4 * n_plots), sharex=True, constrained_layout=True
-        )
-        if n_plots == 1:
-            axes = [axes]
-    else:
-        axes = np.atleast_1d(ax_array)
-        fig = axes[0].figure
-
+    fig, axes = plt.subplots(
+        n_plots, 1, figsize=(6, 4), sharex=True, constrained_layout=True
+    )
+    axes = [axes] if n_plots == 1 and ax_array is None else axes
     colors = sns.color_palette("viridis", n_colors=n_cands)
 
-    # plot dims
+    # Plot each dimension separately
     for ax_idx, dim_idx in enumerate(dims_to_plot):
         ax = axes[ax_idx]
+        dim_v_mu, dim_v_sig = v_mu[:, dim_idx], 1.0 / np.sqrt(v_pr[:, dim_idx])
+        dim_c_mu, dim_c_sig = c_mu[:, dim_idx], 1.0 / np.sqrt(c_pr[:, dim_idx])
 
-        # plot voters (faint lines)
-        dim_v_mu = v_mu[:, dim_idx]
-        dim_v_sig = 1.0 / np.sqrt(v_pr[:, dim_idx])
-
+        # Plot voters' preference distributions
         for mu, sigma in zip(dim_v_mu, dim_v_sig):
-            pdf = norm.pdf(x, loc=mu, scale=sigma)
-            ax.plot(x, pdf, color="black", alpha=0.02, linewidth=1)
-
-        # plot candidates (filled)
-        dim_c_mu = c_mu[:, dim_idx]
-        dim_c_sig = 1.0 / np.sqrt(c_pr[:, dim_idx])
-
-        for i, (mu, sigma) in enumerate(zip(dim_c_mu, dim_c_sig)):
-            pdf = norm.pdf(x, loc=mu, scale=sigma)
-            ax.fill_between(x, pdf, color=colors[i], alpha=0.5, label=cand_ids[i])
-            ax.plot(x, pdf, color=colors[i], alpha=1.0, linewidth=1.5)
-
-        # format
-        ax.set_title(f"Dimension {dim_idx}", loc="left", fontsize=10, fontweight="bold")
-        ax.set_yticks([])
-        ax.grid(True, axis="x", alpha=0.3, linestyle="--")
-
-        if ax_idx == 0:
-            # legend
-            v_proxy = plt.Line2D([0], [0], color="black", alpha=0.3, label="Voters")
-            handles, labels = ax.get_legend_handles_labels()
-            ax.legend(
-                handles=handles + [v_proxy],
-                labels=labels + ["Voters"],
-                loc="upper right",
+            ax.fill_between(
+                x,
+                norm.pdf(x, loc=mu, scale=sigma),
+                color="black",
+                alpha=0.3,
+                linewidth=0,
             )
 
-    axes[-1].set_xlabel("Preference Spectrum (Belief Space)")
-    return fig
+        # Plot candidates' preference distributions
+        for i, (mu, sigma) in enumerate(zip(dim_c_mu, dim_c_sig)):
+            pdf = norm.pdf(x, loc=mu, scale=sigma)
+            ax.fill_between(
+                x, pdf, color=colors[i], alpha=0.5, label=cand_ids[i], linewidth=0
+            )
+
+        # Format the axis with title and grid
+        ax.set_title(
+            f"Dimension {dim_idx}", loc="center", fontsize=10, fontweight="normal"
+        )
+        ax.set_yticks([])
+
+    # Set the x-axis label for the last plot
+    axes[-1].set_xlabel("Preference")
+    return fig, axes
 
 
 def plot_vote_shares(
@@ -208,7 +186,7 @@ def plot_belief_trajectory(
     Tuple[plt.Figure, plt.Axes, plt.Axes]
         The figure, main axis, and density axis.
     """
-    # 1. Prepare data
+    # Prepare data
     time_steps = np.arange(len(observations))
     ci_bound = 1.96 * (1 / np.sqrt(precisions))
 
@@ -217,9 +195,9 @@ def plot_belief_trajectory(
         1 / np.sqrt(preference_params[1]),
     )
 
-    # 2. Setup Axes (Main plot 5/6 width, Density plot 1/6 width)
+    # Setup Axes
     if axes is None:
-        fig = plt.figure(figsize=(12, 6))
+        fig = plt.figure(figsize=(8, 4))
         gs = gridspec.GridSpec(1, 6, figure=fig, wspace=0.02)
         ax_main = fig.add_subplot(gs[0, :-1])
         ax_density = fig.add_subplot(gs[0, -1], sharey=ax_main)
@@ -227,7 +205,7 @@ def plot_belief_trajectory(
         ax_main, ax_density = axes
         fig = ax_main.figure
 
-    # 3. Plot Main Trajectory (Observations, Mean, Confidence Interval)
+    # Plot Main Trajectory (Observations, Mean, Confidence Interval)
     ax_main.scatter(
         time_steps,
         observations,
@@ -253,8 +231,7 @@ def plot_belief_trajectory(
     ax_main.legend(loc="upper left")
     ax_main.grid(True, ls=":", alpha=0.6)
 
-    # 4. Plot Side Density (Target Distribution)
-    # Determine Y-range covering both current view and target distribution
+    # Plot Side Density (Target Distribution)
     y_min, y_max = ax_main.get_ylim()
     y_vals = np.linspace(
         min(y_min, target_mean - 4 * target_std),
