@@ -6,7 +6,23 @@ from eci.voting_system.decisions import _sample_choice
 
 
 def _vote_random(env, key, *args, **kwargs) -> dict:
-    """Perform random vote for each agent."""
+    """Perform random voting.
+
+    Parameters
+    ----------
+    env:
+        The environment object.
+    key:
+        A JAX PRNG key (rng) used for seeding random operations.
+    args:
+        Variable length argument list.
+    kwargs:
+        Arbitrary keyword arguments.
+
+    Returns
+    -------
+        vote data.
+    """
     num_agents = len(env.voters)
     num_candidates = len(env.candidates)
 
@@ -65,7 +81,19 @@ def _vote_random(env, key, *args, **kwargs) -> dict:
 
 
 def _find_top_two_winners(votes_array: ArrayLike, num_candidates: int) -> ArrayLike:
-    """Find two candidates with the most votes."""
+    """Find the two candidates with the most votes.
+
+    Parameters
+    ----------
+    votes_array:
+        voting result from the simulation.
+    num_candidates:
+        number of candidates.
+
+    Returns
+    -------
+        vote data.
+    """
     # Count votes for each unique candidate
     counts = jnp.bincount(votes_array.astype(jnp.int32), length=num_candidates)
 

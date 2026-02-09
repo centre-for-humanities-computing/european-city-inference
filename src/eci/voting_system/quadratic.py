@@ -7,7 +7,25 @@ from eci.voting_system.decisions import _compute_preferences, _sample_choice
 
 
 def _vote_quadratic(env, key, budget: float = 99.0, *args, **kwargs) -> dict:
-    """Quadratic Voting process."""
+    """Perform quadratic voting.
+
+    Parameters
+    ----------
+    env:
+        The environment object.
+    key:
+        A JAX PRNG key (rng) used for seeding random operations.
+    args:
+        Variable length argument list.
+    budget:
+        Token for quadratic voting.
+    kwargs:
+        Arbitrary keyword arguments.
+
+    Returns
+    -------
+        vote data.
+    """
     # Extract all agent beliefs and preferences
     agent_data = _extract_env_data_vectorized(env)
 
@@ -31,7 +49,7 @@ def _vote_quadratic(env, key, budget: float = 99.0, *args, **kwargs) -> dict:
     vote_choice_legacy = candidate_ids[top_investment_indices]
 
     row_sums = jnp.sum(votes_matrix, axis=1, keepdims=True)
-    safe_row_sums = jnp.where(row_sums == 0, 1.0, row_sums)  # Évite division par 0
+    safe_row_sums = jnp.where(row_sums == 0, 1.0, row_sums)
     pseudo_probs = votes_matrix / safe_row_sums
 
     sorted_indices = jnp.argsort(total_votes)[::-1]
@@ -65,7 +83,21 @@ def _vote_quadratic(env, key, budget: float = 99.0, *args, **kwargs) -> dict:
 def _compute_sequential_qv_allocation(
     key: jax.random.PRNGKey, candidate_preferences: ArrayLike, budget: float
 ) -> tuple[ArrayLike, ArrayLike]:
-    """Allocates budget and returns INTEGER votes."""
+    """Compute token allocaiton.
+
+    Parameters
+    ----------
+    key:
+        A JAX PRNG key (rng) used for seeding random operations.
+    candidate_preferences:
+        Preference for each candidate.
+    budget:
+        Token to allocate.
+
+    Returns
+    -------
+        vote allocation and credit spent.
+    """
     num_agents, num_candidates = candidate_preferences.shape
 
     # Weights strategy
@@ -93,7 +125,25 @@ def _compute_sequential_qv_allocation(
 
 
 def strategic_quadratic_vote(env, key, budget: float = 99.0, *args, **kwargs) -> dict:
-    """Strategic Quadratic Voting."""
+    """Perform quadratic strategic voting.
+
+    Parameters
+    ----------
+    env:
+        The environment object.
+    key:
+        A JAX PRNG key (rng) used for seeding random operations.
+    budget:
+        Token for quadratic voting.
+    args:
+        Variable length argument list.
+    kwargs:
+        Arbitrary keyword arguments.
+
+    Returns
+    -------
+        vote data.
+    """
     # Simulate classic QV to predict expected winners
     expected_results = _vote_quadratic(env, key, budget, *args, **kwargs)
     expected_winner = expected_results["final_winner"]
