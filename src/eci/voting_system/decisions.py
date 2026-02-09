@@ -58,7 +58,6 @@ def _compute_preferences(
     # Shape: (n_agents, n_candidates)
     pref_candidate_gap = _get_pref_candidate_gap(data)
 
-    # Pour soustraire, on aligne les dimensions :
     # (n_agents, 1) - (n_agents, n_candidates) -> (n_agents, n_candidates)
     preference_score_per_agent = pref_belief_gap[:, jnp.newaxis] - pref_candidate_gap
 

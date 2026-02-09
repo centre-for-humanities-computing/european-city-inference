@@ -3,8 +3,8 @@ from .decisions import (
     _compute_preferences,
     _sample_choice,
 )
-from .plurality import _vote_plurality
-from .quadratic import _vote_quadratic
+from .plurality import _vote_plurality, strategic_vote
+from .quadratic import _vote_quadratic, strategic_quadratic_vote
 from .random_voting import _vote_random
 
 __all__ = [
@@ -15,4 +15,6 @@ __all__ = [
     "_compute_preferences",
     "_get_pref_belief_gap",
     "_get_pref_candidate_gap",
+    "strategic_vote",
+    "strategic_quadratic_vote",
 ]

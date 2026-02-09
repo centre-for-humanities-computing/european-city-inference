@@ -44,7 +44,7 @@ def kl_divergence(
     var_pref = 1.0 / precision_pref
 
     # KL divergence formula
-    kl = (
+    kl = (  # To do the KL blablabl (1)
         jnp.log(jnp.sqrt(var_pref) / jnp.sqrt(var_belief))
         + (var_belief + (mean_belief - mean_pref) ** 2) / (2 * var_pref)
         - 0.5

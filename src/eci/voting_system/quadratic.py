@@ -90,3 +90,37 @@ def _compute_sequential_qv_allocation(
     votes_matrix = jnp.floor(jnp.sqrt(credits_spent)).astype(jnp.int32)
 
     return votes_matrix, credits_spent
+
+
+def strategic_quadratic_vote(env, key, budget: float = 99.0, *args, **kwargs) -> dict:
+    """Strategic Quadratic Voting."""
+    # Simulate classic QV to predict expected winners
+    expected_results = _vote_quadratic(env, key, budget, *args, **kwargs)
+    expected_winner = expected_results["final_winner"]
+    total_votes_per_candidate = expected_results["total_votes_per_candidate"]
+
+    # Extract agent preferences
+    agent_data = _extract_env_data_vectorized(env)
+    candidate_preferences, pref_candidate_gap, pref_belief_gap = _compute_preferences(
+        agent_data
+    )
+
+    # Weight preferences toward expected winner or top candidates
+    strategic_factor = 2.0  # Boost factor for strategic candidates
+    adjusted_preferences = candidate_preferences * (
+        1 + (candidate_preferences == expected_winner) * (strategic_factor - 1)
+    )
+    kwargs["custom_preferences"] = adjusted_preferences
+    # Re-run QV with adjusted preferences
+    new_key = jax.random.PRNGKey(
+        jax.random.randint(key, (), 0, 1000000)
+    )  # Fresh random key
+    strategic_results = _vote_quadratic(env, new_key, budget, *args, **kwargs)
+
+    # Return strategic results + expected outcomes
+    return {
+        **strategic_results,
+        "expected_winner": expected_winner,
+        "expected_total_votes": total_votes_per_candidate,
+        "strategy_used": "weighted_by_expected_results",
+    }

@@ -24,6 +24,7 @@ dependencies = [
     "seaborn>=0.13.2",
     "pingouin>=0.5.5",
     "importlib>=1.0.4",
+    "tqdm>=4.67.3",
 ]
 
 [project.optional-dependencies]
@@ -59,3 +60,12 @@ convention = "numpy"
 testpaths = ["tests"]
 pythonpath = ["src"]
 addopts = "--cov=eci --cov-report=term --cov-report=html"
+
+[dependency-groups]
+dev = [
+    "mkdocs-git-revision-date-localized-plugin>=1.5.1",
+    "mkdocs-jupyter>=0.25.1",
+    "mkdocs-material>=9.7.1",
+    "mkdocs-minify-plugin>=0.8.0",
+    "mkdocstrings[python]>=1.0.2",
+]

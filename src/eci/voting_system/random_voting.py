@@ -73,20 +73,3 @@ def _find_top_two_winners(votes_array: ArrayLike, num_candidates: int) -> ArrayL
     _, top_two_winners = jax.lax.top_k(counts, k=2)
 
     return top_two_winners
-
-
-def _update_public_poll(self, vote_counts: dict) -> None:
-    """Update the public poll with the latest election results."""
-    if not self.use_theory_of_mind or not vote_counts:
-        return
-
-    total_votes = sum(vote_counts.values())
-    if total_votes == 0:
-        return
-
-    # Create a vector of vote proportions from the results dict
-    candidate_ids = [c.id for c in self.candidates]
-    self.public_poll = jnp.array(
-        [vote_counts.get(cid, 0) / total_votes for cid in candidate_ids]
-    )
-    print(f"Public poll updated: {self.public_poll}")

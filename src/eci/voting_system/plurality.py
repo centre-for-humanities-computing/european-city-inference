@@ -10,7 +10,23 @@ from eci.voting_system.decisions import (
 
 
 def _vote_plurality(env, key, *args, **kwargs) -> dict:
-    """Perform plurality vote for each agent."""
+    """Perform plurality voting.
+
+    Parameters
+    ----------
+    env:
+        The environment object.
+    key:
+        A JAX PRNG key (rng) used for seeding random operations.
+    args:
+        Variable length argument list.
+    kwargs:
+        Arbitrary keyword arguments.
+
+    Returns
+    -------
+        vote data.
+    """
     # Extract all agent beliefs and preferences
     agent_data = _extract_env_data_vectorized(env)
 
@@ -18,8 +34,6 @@ def _vote_plurality(env, key, *args, **kwargs) -> dict:
     candidate_preferences, pref_candidate_gap, pref_belief_gap = _compute_preferences(
         agent_data
     )
-
-    # --- ROUND 1 ---
 
     # Split the JAX key for two separate random samples
     key_round_1, key_round_2 = jax.random.split(key)
@@ -34,8 +48,6 @@ def _vote_plurality(env, key, *args, **kwargs) -> dict:
     # Find the top two winners from round 1
     top_two_winners = _find_top_two_winners(vote_1, candidate_preferences.shape[1])
 
-    # --- ROUND 2 ---
-
     # Create mask for round 2 (only top two are eligible)
     num_candidates = candidate_preferences.shape[1]
     all_candidates_indices = jnp.arange(num_candidates)
@@ -48,7 +60,6 @@ def _vote_plurality(env, key, *args, **kwargs) -> dict:
     # Find the final winner (most votes in round 2)
     final_winner = _find_top_two_winners(vote_2, candidate_preferences.shape[1])[0]
 
-    # --- RESULTS ---
     return {
         # --- Round 1 ---
         "vote_round_1": vote_1,
@@ -66,7 +77,19 @@ def _vote_plurality(env, key, *args, **kwargs) -> dict:
 
 
 def _find_top_two_winners(votes_array: ArrayLike, num_candidates: int) -> ArrayLike:
-    """Find two candidates with the most votes."""
+    """Find the two candidates with the most votes.
+
+    Parameters
+    ----------
+    votes_array:
+        voting result from the simulation.
+    num_candidates:
+        number of candidates.
+
+    Returns
+    -------
+        vote data.
+    """
     # Count votes for each unique candidate
     counts = jnp.bincount(votes_array.astype(jnp.int32), length=num_candidates)
 
@@ -76,31 +99,53 @@ def _find_top_two_winners(votes_array: ArrayLike, num_candidates: int) -> ArrayL
     return top_two_winners
 
 
-############# Public Poll Update IN CONSTRUCTION  #############
-def _compute_poll_results(votes: jnp.ndarray, num_candidates: int) -> jnp.ndarray:
-    """Calculate vote proportions."""
-    # 1. Count votes for every candidate ID (0 to num_candidates-1)
-    # This is much faster than a Python loop over a dictionary
-    vote_counts = jnp.bincount(votes, length=num_candidates)
+def strategic_vote(env, key, *args, **kwargs) -> dict:
+    """Perform plurality strategic voting.
 
-    # 2. Calculate proportions
-    total_votes = votes.shape[0]
+    Parameters
+    ----------
+    env:
+        The environment object.
+    key:
+        A JAX PRNG key (rng) used for seeding random operations.
+    args:
+        Variable length argument list.
+    kwargs:
+        Arbitrary keyword arguments.
 
-    # We use jnp.where to handle the edge case of 0 votes safely
-    return jnp.where(total_votes > 0, vote_counts / total_votes, 0.0)
+    Returns
+    -------
+        vote data.
+    """
+    # Simulate a classic vote to predict expected winners
+    expected_results = _vote_plurality(env, key, *args, **kwargs)
+    expected_winners = expected_results["first_round_winners"]  # Top 2 candidates
+    expected_final_winner = expected_results["final_winner"]  # Predicted winner
 
+    # Extract agent preferences
+    agent_data = _extract_env_data_vectorized(env)
+    candidate_preferences, pref_candidate_gap, pref_belief_gap = _compute_preferences(
+        agent_data
+    )
 
-# Example of how to integrate it into your class method
-def update_public_poll(self, votes: jnp.ndarray):
-    """Update the public poll with the latest election results."""
-    if not self.use_theory_of_mind:
-        return
+    # Weight preferences toward the expected winner
+    strategic_factor = 2.0  # Boost preference for the predicted winner
+    adjusted_preferences = candidate_preferences * (
+        1 + (candidate_preferences == expected_final_winner) * (strategic_factor - 1)
+    )
 
-    # num_candidates must be known (static)
-    num_candidates = len(self.candidates)
+    # Update agent data with adjusted preferences
+    kwargs["custom_preferences"] = adjusted_preferences
 
-    # Compute the new poll using the JAX-native function
-    self.public_poll = _compute_poll_results(votes, num_candidates)
+    # Re-run the vote with the new preferences
+    new_key = jax.random.PRNGKey(jax.random.randint(key, (), 0, 1000000))
+    strategic_results = _vote_plurality(env, new_key, *args, **kwargs)
 
-    # Logging is fine here because this method is the entry point
-    print(f"Public poll updated: {self.public_poll}")
+    # Return strategic vote results + expected outcomes
+
+    return {
+        **strategic_results,
+        "expected_winners": expected_winners,
+        "expected_final_winner": expected_final_winner,
+        "strategy_used": "weighted_by_expected_results",
+    }
