@@ -1,11 +1,9 @@
-from typing import List, Literal, Optional, Tuple
+from typing import Literal, Optional, Tuple
 
 import jax.numpy as jnp
 import numpy as np
 from jax.typing import ArrayLike
-from scipy.stats import halfnorm, norm
 
-# Type aliases for readability
 Params = Tuple[float, float]
 PhaseParams = Tuple[Params, Params]
 
@@ -44,7 +42,7 @@ def kl_divergence(
     var_pref = 1.0 / precision_pref
 
     # KL divergence formula
-    kl = (  # To do the KL blablabl (1)
+    kl = (
         jnp.log(jnp.sqrt(var_pref) / jnp.sqrt(var_belief))
         + (var_belief + (mean_belief - mean_pref) ** 2) / (2 * var_pref)
         - 0.5
@@ -107,14 +105,14 @@ def _get_parameter_trajectory(
         mask_degrade = (t >= s_time) & (t < r_time)
         mask_recover = t >= r_time
 
-        # 1. Degradation Phase
+        # Degradation Phase
         if np.any(mask_degrade):
             prog = (t[mask_degrade] - s_time) / (r_time - s_time)
             w = prog if trend_shape == "linear" else prog**2
             alpha_t[mask_degrade] = a1 * (1 - w) + a2 * w
             beta_t[mask_degrade] = b1 * (1 - w) + b2 * w
 
-        # 2. Recovery Phase
+        # Recovery Phase
         if np.any(mask_recover):
             prog = (t[mask_recover] - r_time) / (n_steps - r_time)
             w = (1 - prog) if trend_shape == "linear" else (1 - prog) ** 2
@@ -197,56 +195,6 @@ def generate_observations(
     return np.clip(obs, 0, 1)
 
 
-def generate_candidates(
-    n_candidates: int,
-    n_preferences: int,
-    manual_means: Optional[ArrayLike] = None,
-    manual_precisions: Optional[ArrayLike] = None,
-) -> List[Tuple[np.ndarray, np.ndarray]]:
-    """Generate candidates with preferences.
-
-    Parameters
-    ----------
-    n_candidates :
-        Number of candidates to generate.
-    n_preferences :
-        Number of preferences per candidate.
-    manual_means :
-        Optional manual means for the candidates.
-    manual_precisions :
-        Optional manual precisions for the candidates.
-
-    Returns
-    -------
-        List of tuples (means, precisions) for each candidate.
-    """
-    if manual_means is not None and manual_precisions is not None:
-        manual_means = np.asarray(manual_means)
-        manual_precisions = np.asarray(manual_precisions)
-
-        if manual_means.shape != (n_candidates, n_preferences):
-            raise ValueError(f"means must have shape ({n_candidates}, {n_preferences})")
-
-        if manual_precisions.shape != (n_candidates, n_preferences):
-            raise ValueError(
-                f"precisions must have shape ({n_candidates}, {n_preferences})"
-            )
-
-        candidates = [
-            (manual_means[i], manual_precisions[i]) for i in range(n_candidates)
-        ]
-
-    else:
-        mu_sigma = 1
-        sigma_scale = 1
-        candidates = []
-        for _ in range(n_candidates):
-            mus = norm.rvs(loc=2, scale=mu_sigma, size=n_preferences)
-            pis = halfnorm.rvs(scale=sigma_scale, size=n_preferences)
-            candidates.append((mus, pis))
-    return candidates
-
-
 def get_voter_trajectory_data(env, voter_id: int, pref_idx: int = 0):
     """Retrieve specific arrays for a single voter's belief trajectory."""
     voter = next(v for v in env.voters if v.id == voter_id)
@@ -285,12 +233,10 @@ def _extract_env_data_vectorized(env):
     pref_idx_list = env.preferences_idx
 
     # Extract Candidate Data
-    # Shape: (n_candidates, n_features)
     policy_means = jnp.stack([c.policy["mean"].ravel() for c in env.candidates])
     policy_precs = jnp.stack([c.policy["precision"].ravel() for c in env.candidates])
 
     # Extract Voter Beliefs
-    # Stack along axis -1 to ensure shape is (n_agents, n_preferences)
     means_belief = jnp.stack(
         [env.last_attributes[i]["expected_mean"] for i in pref_idx_list], axis=-1
     )

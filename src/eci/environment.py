@@ -1,9 +1,8 @@
-from typing import Any, Counter, Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 import jax
 import jax.numpy as jnp
 import numpy as np
-import pandas as pd
 import tqdm
 from jax import vmap
 from jax.tree_util import Partial
@@ -130,7 +129,7 @@ class Environment:
         all_results = {}
 
         # Loop n_simulations times
-        for i in tqdm(range(n_simulations), desc="Running Simulations"):
+        for i in tqdm.tqdm((range(n_simulations)), desc="Running Simulations"):
             key, subkey = jax.random.split(key)
             # Run the simulation function once
             single_run_result = func(self, subkey, *args, **kwargs)
@@ -167,31 +166,3 @@ class Environment:
         self.preferences_idx = self.network.input_idxs
         for agent_idx in range(self.voters.__len__()):
             self.agents[agent_idx].trajectory = self.node_trajectories[0]
-
-    # TODO: This could be remove and be part of utils
-    def get_winners(self, vote_list, top_n):
-        """Determine the top N winners from a list of votes."""
-        clean_votes = [v.item() if hasattr(v, "item") else v for v in vote_list]
-        counter = Counter(clean_votes)
-        top_candidates = counter.most_common(top_n)
-        winners = [candidat for candidat, nb_voix in top_candidates]
-        return winners
-
-    def create_data_frame(self):
-        """DataFrame summarizing the simulation results."""
-        results_list = []
-        for simulation_idx in range(self.num_simulations):
-            votes_r1 = [voter.vote_round_1[simulation_idx] for voter in self.voters]
-            votes_r2 = [voter.vote_round_2[simulation_idx] for voter in self.voters]
-            top2_r1 = self.get_winners(votes_r1, 2)
-            top1_r2 = self.get_winners(votes_r2, 1)
-            results_list.append(
-                {
-                    "simulation_id": simulation_idx,
-                    "vote_round_1": votes_r1,
-                    "vote_round_2": votes_r2,
-                    "winners_round_1": top2_r1,
-                    "winner_round_2": top1_r2[0] if top1_r2 else None,
-                }
-            )
-        return pd.DataFrame(results_list)
