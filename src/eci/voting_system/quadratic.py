@@ -30,9 +30,17 @@ def _vote_quadratic(env, key, budget: float = 99.0, *args, **kwargs) -> dict:
     agent_data = _extract_env_data_vectorized(env)
 
     # Evaluate candidate scores for each agent
-    candidate_preferences, pref_candidate_gap, pref_belief_gap = _compute_preferences(
-        agent_data
-    )
+    # Evaluate candidate scores for each agent
+    if "custom_preferences" in kwargs:
+        candidate_preferences = kwargs["custom_preferences"]
+        agent_data = _extract_env_data_vectorized(env)
+        _, pref_candidate_gap, pref_belief_gap = _compute_preferences(agent_data)
+    else:
+        # Extract all agent beliefs and preferences
+        agent_data = _extract_env_data_vectorized(env)
+        candidate_preferences, pref_candidate_gap, pref_belief_gap = (
+            _compute_preferences(agent_data)
+        )
     candidate_ids = jnp.array([c.id for c in env.candidates])
 
     # Allocation QV

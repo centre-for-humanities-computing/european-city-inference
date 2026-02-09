@@ -31,10 +31,16 @@ def _vote_plurality(env, key, *args, **kwargs) -> dict:
     agent_data = _extract_env_data_vectorized(env)
 
     # Evaluate candidate scores for each agent
-    candidate_preferences, pref_candidate_gap, pref_belief_gap = _compute_preferences(
-        agent_data
-    )
-
+    if "custom_preferences" in kwargs:
+        candidate_preferences = kwargs["custom_preferences"]
+        agent_data = _extract_env_data_vectorized(env)
+        _, pref_candidate_gap, pref_belief_gap = _compute_preferences(agent_data)
+    else:
+        # Extract all agent beliefs and preferences
+        agent_data = _extract_env_data_vectorized(env)
+        candidate_preferences, pref_candidate_gap, pref_belief_gap = (
+            _compute_preferences(agent_data)
+        )
     # Split the JAX key for two separate random samples
     key_round_1, key_round_2 = jax.random.split(key)
 

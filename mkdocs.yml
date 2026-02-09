@@ -53,7 +53,7 @@ plugins:
 markdown_extensions:
   - pymdownx.highlight:
       anchor_linenums: true
-  - md_in_html  # <--- Add this line!
+  - md_in_html
   - pymdownx.inlinehilite
   - pymdownx.snippets
   - pymdownx.superfences:
@@ -74,13 +74,13 @@ markdown_extensions:
 extra_javascript:
   - https://polyfill.io/v3/polyfill.min.js?features=es6
   - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
-
+  - javascripts/mathjax.js
 nav:
   - Home: index.md
   - Glossary: glossary.md
-
   - Tutorials:
       - Decision Making: tutorials/tutorial_1_decision_making.ipynb
       - Voting System: tutorials/tutorial_2_voting_system.ipynb
       - Polarization: tutorials/tutorial_3_polarization.ipynb
   - API Reference: api.md
+  - Algorithms: algorithms.md

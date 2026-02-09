@@ -20,6 +20,7 @@ hide:
   <a class="md-button" href="api.md">
     Explore API
   </a>
+
 </p>
 
 ---
@@ -66,3 +67,4 @@ Get up and running in seconds using `make` and `uv`:
 git clone [https://github.com/sylvainestebe/european-city-inference.git](https://github.com/sylvainestebe/european-city-inference.git)
 cd european-city-inference
 make install
+```
