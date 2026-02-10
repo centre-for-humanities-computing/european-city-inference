@@ -5,7 +5,7 @@
 [![License](https://img.shields.io/badge/license-MIT-purple?style=flat-square)](LICENSE)
 [![Code Style](https://img.shields.io/badge/code%20style-ruff-000000.svg?style=flat-square)](https://github.com/astral-sh/ruff)
 
-**Agent-Based Political Election Simulator using Active Inference.**
+**Agent-Based Political Election Simulator using Predictive Coding.**
 
 ECI is a high-performance simulation framework designed to model collective decision-making in volatile political environments. Built on top of **JAX** and **PyHGF** (Hierarchical Gaussian Filter), it simulates how thousands of voters update their beliefs and cast votes under different systems (Plurality, Quadratic Voting).
 
