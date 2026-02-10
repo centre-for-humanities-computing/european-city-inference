@@ -12,7 +12,6 @@ ECI is a high-performance simulation framework designed to model collective deci
 ## 🚀 Key Features
 
 * **Cognitive Agents:** Voters are not static; They employ **Bayesian belief updating** as implemented in **hierarchical predictive coding networks**, together with an **uncertainty-informed decision-making process** to select the most relevant candidate. Furthermore, they observe events per **preference dimension**.
-* **JAX Accelerated:** Fully vectorized simulation logic for high-performance computing (GPU/TPU ready).
 * **Multi-Voting Systems:** Compare outcomes between **Plurality Voting** and **Quadratic Voting**.
 
 ## 🛠️ Installation
