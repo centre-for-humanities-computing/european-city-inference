@@ -1,4 +1,3 @@
-```markdown
 # European City Inference (ECI)
 
 [![Tests](https://img.shields.io/badge/tests-passing-green?style=flat-square&logo=github)](https://github.com/sylvainestebe/european-city-inference/actions)
