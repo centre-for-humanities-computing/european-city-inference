@@ -76,7 +76,7 @@ print(f"Voter 0 Trajectory: {env.voters[0].trajectory}")
 
 Full documentation and tutorials are available at:
 
-👉 **[https://sylvainestebe.github.io/european-city-inference/](https://sylvainestebe.github.io/european-city-inference/)**
+👉 **[https://centre-for-humanities-computing.github.io/european-city-inference//](https://centre-for-humanities-computing.github.io/european-city-inference//)**
 
 ## Citation
 
