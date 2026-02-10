@@ -30,7 +30,6 @@ def _vote_quadratic(env, key, budget: float = 99.0, *args, **kwargs) -> dict:
     agent_data = _extract_env_data_vectorized(env)
 
     # Evaluate candidate scores for each agent
-    # Evaluate candidate scores for each agent
     if "custom_preferences" in kwargs:
         candidate_preferences = kwargs["custom_preferences"]
         agent_data = _extract_env_data_vectorized(env)
