@@ -10,7 +10,17 @@ from jax.typing import ArrayLike
 def _winner_satisfaction(candidate_preferences: ArrayLike, winner: int) -> float:
     """Compute the winner satisfaction metric.
 
-    Defined as the sum of preferences of all agents for the winning candidate.
+    Parameters
+    ----------
+    candidate_preferences : dict
+        array of preference for each candidate.
+    winner : int
+        winner of election.
+
+    Returns
+    -------
+    satisafcation : jnp.ndarray
+        sum of preferences of all agents for the winning candidate.
     """
     return jnp.sum(candidate_preferences[:, winner])
 
@@ -20,8 +30,19 @@ def _vote_efficiency(
 ) -> float:
     """Compute the vote efficiency metric.
 
-    Defined as the average preference gap for the candidates chosen by voters,
-    weighted by the number of votes they received.
+    Parameters
+    ----------
+    candidate_preferences : dict
+        array of preference for each candidate.
+    votes_matrix : int
+        matrix of token allocate per candidate.
+
+    Returns
+    -------
+    vote_efficiency : jnp.ndarray
+        average preference gap for the candidates chosen by voters,
+        weighted by the number of votes they received.
+
     """
     # Weighted sum of preferences
     weighted_gaps = votes_matrix * candidate_preferences
@@ -38,7 +59,22 @@ def _vote_efficiency(
 def compute_metrics(
     candidate_preferences: ArrayLike, votes_matrix: ArrayLike, winner: int
 ) -> dict:
-    """Compute the metric for a single simulation."""
+    """Compute the metric for a single simulation.
+
+    Parameters
+    ----------
+    candidate_preferences : dict
+        array of preference for each candidate.
+    votes_matrix : int
+        matrix of token allocate per candidate.
+    winner : int
+        winner of election.
+
+    Returns
+    -------
+    metrics : jnp.ndarray
+
+    """
     # Compute winner satisfaction
     winner_satisfaction = _winner_satisfaction(candidate_preferences, winner)
 
@@ -52,7 +88,18 @@ def compute_metrics(
 
 
 def batch_compute_metrics(sim_results: Dict[int, Dict[str, Any]]) -> pd.DataFrame:
-    """Compute metrics for all simulations."""
+    """Compute metrics for all simulations.
+
+    Parameters
+    ----------
+    sim_results : dict
+        simulations results.
+
+    Returns
+    -------
+    df : jnp.ndarray
+
+    """
     # Data Extraction
     keys = list(sim_results.keys())
     first_res = sim_results[keys[0]]
