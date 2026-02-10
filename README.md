@@ -1,16 +1,3 @@
-C'est une excellente idée. Le `README.md` et le `index.md` ont des rôles différents :
-
-* **README.md (GitHub)** : Doit être concis, technique et convaincre le développeur de mettre une étoile ⭐ ou de cloner le repo.
-* **docs/index.md (Site Web)** : Doit être accueillant, visuel et guider l'utilisateur (débutant ou expert) vers la bonne section.
-
-Voici les versions "Pro" rédigées en anglais (standard open-source) pour ces deux fichiers.
-
----
-
-### 1. Le `README.md` (Pour la racine du projet)
-
-Ce fichier est optimisé pour GitHub : badges, installation rapide, et citation académique.
-
 ```markdown
 # European City Inference (ECI)
 
@@ -25,7 +12,7 @@ ECI is a high-performance simulation framework designed to model collective deci
 
 ## 🚀 Key Features
 
-* **Cognitive Agents:** Voters are not static; they use Active Inference to minimize surprise and update beliefs based on candidate policies.
+* **Cognitive Agents:** Voters are not static; they use [Active Inference](https://en.wikipedia.org/wiki/Free_energy_principle) to minimize surprise and update beliefs based on candidate policies.
 * **JAX Accelerated:** Fully vectorized simulation logic for high-performance computing (GPU/TPU ready).
 * **Multi-Voting Systems:** Compare outcomes between **Plurality Voting** and **Quadratic Voting**.
 * **Polarization Metrics:** Built-in tools to measure and visualize social polarization and dissatisfaction.
@@ -39,7 +26,7 @@ This project uses `uv` for modern Python package management.
 git clone [https://github.com/sylvainestebe/european-city-inference.git](https://github.com/sylvainestebe/european-city-inference.git)
 cd european-city-inference
 
-# 2. Install dependencies (via Makefile)
+# 2. Install dependencies
 make install
 
 ```
@@ -50,21 +37,27 @@ Here is a minimal example to run a simulation with 200 voters and 6 candidates:
 
 ```python
 import jax
-from eci.environment import Environment
+from eci.environment import Environment, EnvConfig
 from eci.voting_system.random_voting import _vote_random
 
-# Initialize Environment
-env = Environment(num_voters=200, num_candidates=6, num_preferences=4)
-env.initialize_network()
+# 1. Configure the Environment
+config = EnvConfig(
+    num_voters=200, 
+    num_candidates=6, 
+    num_preferences=4,
+    seed=42
+)
 
-# Run Simulation (100 iterations)
+# 2. Initialize Simulation
+env = Environment(config)
+
+# 3. Run Simulation (100 iterations)
 key = jax.random.PRNGKey(42)
 results = env.run_n_simulation(_vote_random, key, n_simulations=100)
 
-# Analyze Results
-env._update_agents()
-df = env.create_data_frame()
-print(df.head())
+# 4. Access Data (e.g., first voter's trajectory)
+print(f"Winner ID: {env.winner_id}")
+print(f"Voter 0 Trajectory: {env.voters[0].trajectory}")
 
 ```
 
@@ -85,9 +78,9 @@ print(df.head())
 
 Full documentation and tutorials are available at:
 
-👉 **[https://sylvainestebe.github.io/european-city-inference/](https://www.google.com/search?q=https://sylvainestebe.github.io/european-city-inference/)**
+👉 **[https://sylvainestebe.github.io/european-city-inference/](https://sylvainestebe.github.io/european-city-inference/)**
 
-## citation
+## Citation
 
 If you use this software in your research, please cite:
 
