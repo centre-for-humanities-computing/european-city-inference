@@ -653,15 +653,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#1-agent-decision-logic-the-vote-generation" class="md-nav__link">
+  <a href="#agent-decision-logic" class="md-nav__link">
     <span class="md-ellipsis">
       
-        1. Agent Decision Logic (The "Vote" Generation)
+        Agent Decision Logic
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="1. Agent Decision Logic (The &#34;Vote&#34; Generation)">
+    <nav class="md-nav" aria-label="Agent Decision Logic">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -680,45 +680,6 @@
     <span class="md-ellipsis">
       
         Algorithm
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#2-plurality-voting-process-two-round-runoff" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        2. Plurality Voting Process (Two-Round Runoff)
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="2. Plurality Voting Process (Two-Round Runoff)">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#round-1" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Round 1
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#round-2-runoff" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Round 2 (Runoff)
       
     </span>
   </a>
@@ -759,9 +720,8 @@
 
 
 <h1 id="core-algorithms">Core Algorithms</h1>
-<p>This page outlines the primary logic governing agent decision-making and the voting process. The system combines <strong>Active Inference</strong> principles (KL Divergence) with <strong>Social Choice Theory</strong>.</p>
-<h2 id="1-agent-decision-logic-the-vote-generation">1. Agent Decision Logic (The "Vote" Generation)</h2>
-<p>Each agent <span class="arithmatex">\(i\)</span> evaluates candidates <span class="arithmatex">\(c\)</span> based on how well the candidate's policy minimizes the divergence from the agent's preferred state compared to the agent's current belief about the status quo.</p>
+<h2 id="agent-decision-logic">Agent Decision Logic</h2>
+<p>Each agent <span class="arithmatex">\(i\)</span> evaluates candidates <span class="arithmatex">\(c\)</span> based on how well the candidate's policy minimizes the divergence from the agent's preferred state compared to the agent's current belief.</p>
 <h3 id="inputs">Inputs</h3>
 <ul>
 <li><strong>Agent Preferences (<span class="arithmatex">\(P_i\)</span>)</strong>: Target distribution (<span class="arithmatex">\(\mu_{pref}, \pi_{pref}\)</span>).</li>
@@ -772,7 +732,7 @@
 <ol>
 <li>
 <p><strong>Calculate Disatisfaction toward the world</strong>:
-    Measure how far the current belief is from the preference (Risk).
+    Measure how far the current belief is from the preference.
     <span class="arithmatex">\(<span class="arithmatex">\(R_{belief} = D_{KL}(B_i \parallel P_i)\)</span>\)</span></p>
 </li>
 <li>
@@ -781,8 +741,8 @@
     <span class="arithmatex">\(<span class="arithmatex">\(R_{cand, c} = D_{KL}(Q_c \parallel P_i)\)</span>\)</span></p>
 </li>
 <li>
-<p><strong>Compute Utility (Logit)</strong>:
-    The utility is the reduction of dissatisfaction offered by the candidate (Relative reduction in Free Energy).
+<p><strong>Compute Candidate preference</strong>:
+    The reduction of dissatisfaction offered by the candidate.
     <span class="arithmatex">\(<span class="arithmatex">\(U_{i,c} = R_{belief} - R_{cand, c}\)</span>\)</span></p>
 <ul>
 <li>If <span class="arithmatex">\(U &gt; 0\)</span>: Candidate is better than the status quo (reduces divergence).</li>
@@ -791,7 +751,7 @@
 </li>
 <li>
 <p><strong>Generate Selection Probabilities (Softmax)</strong>:
-    Convert utilities into a probability distribution for the vote.
+    Convert into a probability distribution for the vote.
     <span class="arithmatex">\(<span class="arithmatex">\(P(\text{vote}_i = c) = \text{softmax}(U_{i,c}) = \frac{e^{U_{i,c}}}{\sum_j e^{U_{i,j}}}\)</span>\)</span></p>
 </li>
 <li>
@@ -801,27 +761,6 @@
 </li>
 </ol>
 <hr />
-<h2 id="2-plurality-voting-process-two-round-runoff">2. Plurality Voting Process (Two-Round Runoff)</h2>
-<p>The system aggregates individual decisions into a collective outcome using a two-round system.</p>
-<h3 id="round-1">Round 1</h3>
-<ol>
-<li><strong>Collect Votes</strong>:
-    <span class="arithmatex">\(<span class="arithmatex">\(V_1 = \{v_i \mid i \in \text{Agents}\}\)</span>\)</span></li>
-<li><strong>Tally</strong>:
-    <span class="arithmatex">\(<span class="arithmatex">\(\text{Count}_c = \sum_{v \in V_1} \mathbb{I}(v == c)\)</span>\)</span></li>
-<li><strong>Filter</strong>:
-    Select top 2 candidates: <span class="arithmatex">\(W_1, W_2 = \text{argmax}_2(\text{Count})\)</span>.</li>
-</ol>
-<h3 id="round-2-runoff">Round 2 (Runoff)</h3>
-<ol>
-<li><strong>Mask Preferences</strong>:
-    Set utility <span class="arithmatex">\(U_{i,c} = -\infty\)</span> for all <span class="arithmatex">\(c \notin \{W_1, W_2\}\)</span>.</li>
-<li><strong>Re-Sample Votes</strong>:
-    Agents vote again, constrained to the top 2.
-    <span class="arithmatex">\(<span class="arithmatex">\(v'_i \sim \text{Categorical}(\text{softmax}(U_{i} \text{ masked}))\)</span>\)</span></li>
-<li><strong>Final Tally</strong>:
-    <span class="arithmatex">\(<span class="arithmatex">\(\text{Winner} = \text{argmax}(\text{Count}(V'))\)</span>\)</span></li>
-</ol>
 
 
 

@@ -469,6 +469,39 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#environment" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Environment:
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#interaction-rules" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Interaction Rules:
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#emergence" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Emergence:
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#hgf-hierarchical-gaussian-filter" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -480,21 +513,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#plurality-voting" class="md-nav__link">
+  <a href="#tonic-volatility" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Plurality Voting
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#policy-dimensions" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Policy Dimensions
+        Tonic Volatility
       
     </span>
   </a>
@@ -524,6 +546,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#plurality-voting" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Plurality Voting
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#quadratic-voting" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -535,10 +568,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#regret" class="md-nav__link">
+  <a href="#policy-dimensions" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Regret
+        Policy Dimensions
       
     </span>
   </a>
@@ -561,28 +594,6 @@
     <span class="md-ellipsis">
       
         Social Welfare
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#tonic-volatility" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Tonic Volatility
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#trajectory" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Trajectory
       
     </span>
   </a>
@@ -816,54 +827,53 @@
 
 <h1 id="glossary">Glossary</h1>
 <p>Terminology used in the <strong>European City Inference (ECI)</strong> project.</p>
-<h3 id="agent">Agent</h3>
-<p>An autonomous entity in the simulation. ECI distinguishes between two types:</p>
+<h2 id="agent">Agent</h2>
+<p>Autonomous entities (e.g., consumers, bacteria, soldiers) with specific,, often heterogeneous,, attributes and behaviors. ECI distinguishes between two types:</p>
 <ul>
-<li><strong>Voters:</strong> Agents who infer states and cast votes based on their preferences.</li>
-<li><strong>Candidates:</strong> Agents who propose policy platforms to get elected.</li>
+<li><strong>Voters:</strong> Agents who infer states of the world given observation and cast votes based on their preferences.</li>
+<li><strong>Candidates:</strong> Agents who propose policy to get elected.</li>
 </ul>
-<h3 id="hgf-hierarchical-gaussian-filter">HGF (Hierarchical Gaussian Filter)</h3>
-<p>A mathematical model used to simulate how agents (voters) update their beliefs in response to new information (candidate policies) under uncertainty. It allows for tracking how "volatile" or unstable the environment feels to the agent.</p>
+<h2 id="environment">Environment:</h2>
+<p>The space or network where agents exist, interact, and move.</p>
+<h2 id="interaction-rules">Interaction Rules:</h2>
+<p>Defined behaviors or algorithms (e.g., "if agent A touches agent B, infection spreads") that govern how agents interact with each other and their environment.</p>
+<h2 id="emergence">Emergence:</h2>
+<p>The core outcome of an ABM, where high-level, system-wide patterns arise from low-level, individual, interactions</p>
+<h2 id="hgf-hierarchical-gaussian-filter">HGF (Hierarchical Gaussian Filter)</h2>
+<p>A mathematical model used to simulate how people update their beliefs in response to new information under uncertainty.</p>
 <ul>
 <li><em>Library used:</em> <a href="https://github.com/ilabcode/pyhgf">PyHGF Documentation</a></li>
 <li><em>Reference:</em> <a href="https://www.google.com/search?q=https://frontiersin.org/articles/10.3389/fnhum.2011.00028/full">Mathys et al. (2011)</a></li>
 </ul>
-<h3 id="plurality-voting">Plurality Voting</h3>
-<p>A standard voting system where each voter is allowed to vote for only one candidate, and the candidate who polls the most among their counterparts (a plurality) is elected.</p>
-<ul>
-<li><em>See also:</em> <a href="https://en.wikipedia.org/wiki/Plurality_voting">Plurality Voting (Wikipedia)</a></li>
-</ul>
-<h3 id="policy-dimensions">Policy Dimensions</h3>
-<p>The specific thematic axes on which opinions are formed (e.g., Economy, Environment, Security). In the code, these are handled as independent continuous state dimensions (<code>num_preferences</code>).</p>
-<h3 id="precision">Precision</h3>
-<p>A measure of an agent's confidence in a belief. Mathematically, it is the inverse of variance ().</p>
-<h3 id="prediction-error">Prediction Error</h3>
-<p>The difference between what an agent expected to observe (based on their internal model) and what they actually observed. This error signal drives the learning process in the HGF, forcing the agent to update their beliefs to minimize future errors.</p>
-<h3 id="quadratic-voting">Quadratic Voting</h3>
-<p>A collective decision-making procedure where participants are given a budget of "voice credits". They can allocate multiple votes to a candidate, but the cost is quadratic: buying  votes costs  credits. This allows voters to express the <strong>intensity</strong> of their preferences, not just the direction.</p>
-<ul>
-<li><em>See also:</em> <a href="https://en.wikipedia.org/wiki/Quadratic_voting">Quadratic Voting (Wikipedia)</a></li>
-</ul>
-<h3 id="regret">Regret</h3>
-<p>A metric measuring the difference between the maximum utility a voter <em>could</em> have received (if their ideal candidate had won) and the utility they <em>actually</em> received from the election winner.</p>
-<ul>
-<li><em>See also:</em> <a href="https://en.wikipedia.org/wiki/Regret_(decision_theory)">Regret (Decision Theory)</a></li>
-</ul>
-<h3 id="scenario">Scenario</h3>
-<p>A specific configuration for generating input data (observations) that defines how the political environment evolves over time (e.g., a stable period, a sudden shock, or a slow drift in ideologies).</p>
-<h3 id="social-welfare">Social Welfare</h3>
-<p>A global metric used to evaluate the quality of an election outcome. It is typically calculated as the sum of individual utilities of all voters. Maximizing social welfare is often considered the goal of an optimal voting system.</p>
-<ul>
-<li><em>See also:</em> <a href="https://en.wikipedia.org/wiki/Social_welfare_function">Social Welfare Function</a></li>
-</ul>
-<h3 id="tonic-volatility">Tonic Volatility</h3>
+<h2 id="tonic-volatility">Tonic Volatility</h2>
 <p>A parameter in the HGF model () representing the baseline level of environmental volatility as perceived by an agent.</p>
 <ul>
 <li><strong>High Tonic Volatility:</strong> The agent believes the world is changing rapidly, leading to faster learning rates (they change their mind quickly).</li>
 <li><strong>Low Tonic Volatility:</strong> The agent believes the world is stable, leading to slower learning rates (they are more dogmatic).</li>
 </ul>
-<h3 id="trajectory">Trajectory</h3>
-<p>The time series of an agent's internal states throughout the simulation. It visualizes how an agent's beliefs (means) and uncertainties (precisions) evolve step-by-step in response to candidate actions.</p>
+<h2 id="precision">Precision</h2>
+<p>A measure of an agent's confidence in a belief. Mathematically, it is the inverse of variance ().</p>
+<h2 id="prediction-error">Prediction Error</h2>
+<p>The difference between what an agent expected to observe (based on their internal model) and what they actually observed. This error signal drives the learning process in the HGF, the agent to update their beliefs to minimize future errors.</p>
+<h2 id="plurality-voting">Plurality Voting</h2>
+<p>A standard voting system where each voter is allowed to vote for only one candidate, and the candidate who polls the most among their counterparts (a plurality) is elected.</p>
+<ul>
+<li><em>See also:</em> <a href="https://en.wikipedia.org/wiki/Plurality_voting">Plurality Voting (Wikipedia)</a></li>
+</ul>
+<h2 id="quadratic-voting">Quadratic Voting</h2>
+<p>A collective decision-making procedure where participants are given a budget of "voice credits". They can allocate multiple votes to a candidate, but the cost is quadratic: buying  votes costs  credits. This allows voters to express the <strong>intensity</strong> of their preferences, not just the direction.</p>
+<ul>
+<li><em>See also:</em> <a href="https://en.wikipedia.org/wiki/Quadratic_voting">Quadratic Voting (Wikipedia)</a></li>
+</ul>
+<h2 id="policy-dimensions">Policy Dimensions</h2>
+<p>The specific thematic axes on which beliefs are formed (e.g., Economy, Environment, Security).</p>
+<h2 id="scenario">Scenario</h2>
+<p>A specific configuration for generating input data (observations) that defines how the political environment evolves over time (e.g., a stable period, a sudden shock, or a slow drift of dimensions).</p>
+<h2 id="social-welfare">Social Welfare</h2>
+<p>A global metric used to evaluate the quality of an election outcome. It is typically calculated as the sum of individual utilities of all voters. Maximizing social welfare is often considered the goal of an optimal voting system.</p>
+<ul>
+<li><em>See also:</em> <a href="https://en.wikipedia.org/wiki/Social_welfare_function">Social Welfare Function</a></li>
+</ul>
 
 
 
