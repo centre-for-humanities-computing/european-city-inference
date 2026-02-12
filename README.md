@@ -7,16 +7,17 @@
 
 **Agent-Based Political Election Simulator using Predictive Coding.**
 
-ECI is a high-performance simulation framework designed to model collective decision-making in volatile political environments. Built on top of **JAX** and **PyHGF** (Hierarchical Gaussian Filter), it simulates how thousands of voters update their beliefs and cast votes under different systems (Plurality, Quadratic Voting).
+ECI is a Agent-Based simulation designed to model collective decision-making in volatile political environments. Built on top of **JAX** and **PyHGF** (Hierarchical Gaussian Filter), it simulates how thousands of voters update their beliefs and cast votes under different voting systems (Plurality, Quadratic Voting).
 
-## 🚀 Key Features
+## Key Features
 
 * **Cognitive Agents:** Voters are not static; They employ **Bayesian belief updating** as implemented in **hierarchical predictive coding networks**, together with an **uncertainty-informed decision-making process** to select the most relevant candidate. Furthermore, they observe events per **preference dimension**.
+* **Cognitive Agents:** Voters employ **Bayesian belief updating** as implemented in **hierarchical predictive coding networks**, together with an **uncertainty-informed decision-making process** to select the most relevant candidate for them.
 * **Multi-Voting Systems:** Compare outcomes between **Plurality Voting** and **Quadratic Voting**.
 
-## 🛠️ Installation
+## Installation
 
-This project uses `uv` for modern Python package management.
+This project uses `uv` for Python package management.
 
 ```bash
 # 1. Clone the repository
@@ -28,7 +29,7 @@ make install
 
 ```
 
-## ⚡ Quick Start
+## Quick Start
 
 Here is a minimal example to run a simulation with 200 voters and 6 candidates:
 
@@ -52,10 +53,6 @@ env = Environment(config)
 key = jax.random.PRNGKey(42)
 results = env.run_n_simulation(_vote_random, key, n_simulations=100)
 
-# 4. Access Data (e.g., first voter's trajectory)
-print(f"Winner ID: {env.winner_id}")
-print(f"Voter 0 Trajectory: {env.voters[0].trajectory}")
-
 ```
 
 ## 📂 Project Structure
@@ -65,7 +62,7 @@ print(f"Voter 0 Trajectory: {env.voters[0].trajectory}")
 │   ├── agents.py           # Voter and Candidate definitions
 │   ├── environment.py      # Main simulation loop
 │   └── voting_system/      # Plurality, Quadratic, and Decision logic
-├── notebooks/              # Interactive tutorials
+├── notebooks/              # tutorials
 ├── tests/                  # Pytest suite
 └── docs/                   # Documentation sources
 
