@@ -34,28 +34,18 @@ This documentation is designed to help you navigate the project components:
 <div class="grid cards" markdown>
 
 -   :material-school: **Interactive Tutorials**
-
-    Learn by doing with our step-by-step notebooks.
     
-    * [**Decision Making**](tutorials/tutorial_1_decision_making.ipynb): Understand how agents think.
+    * [**Decision Making**](tutorials/tutorial_1_decision_making.ipynb): Understand how the decision making work.
     * [**Voting Systems**](tutorials/tutorial_2_voting_system.ipynb): Compare Plurality vs Quadratic voting.
-    * [**Polarization**](tutorials/tutorial_3_polarization.ipynb): Analyze social dynamics.
+    * [**Polarization**](tutorials/tutorial_3_polarization.ipynb): Compare polarize position under different voting system.
 
 -   :material-code-json: **API Reference**
 
-    Detailed technical documentation for developers.
+    Detailed technical [**documentation**](api.md#core-simulation) for developers.
     
-    * Explore the [**Environment**](api.md#core-simulation) logic.
-    * See how [**Agents**](api.md#agents) (Voters/Candidates) are structured.
-    * Check the [**Voting Algorithms**](api.md#voting-systems).
-
 -   :material-book-open-page-variant: **Glossary**
 
-    Unsure about a term? Check the definitions.
-    
-    * Learn about [**Active Inference**](glossary.md).
-    * Understand the [**HGF Model**](glossary.md).
-    * Define [**Tonic Volatility**](glossary.md).
+    Unsure about a term? Check the [**definition**](glossary.md).
 
 </div>
 

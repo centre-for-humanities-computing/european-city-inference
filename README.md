@@ -11,7 +11,6 @@ ECI is a Agent-Based simulation designed to model collective decision-making in 
 
 ## Key Features
 
-* **Cognitive Agents:** Voters are not static; They employ **Bayesian belief updating** as implemented in **hierarchical predictive coding networks**, together with an **uncertainty-informed decision-making process** to select the most relevant candidate. Furthermore, they observe events per **preference dimension**.
 * **Cognitive Agents:** Voters employ **Bayesian belief updating** as implemented in **hierarchical predictive coding networks**, together with an **uncertainty-informed decision-making process** to select the most relevant candidate for them.
 * **Multi-Voting Systems:** Compare outcomes between **Plurality Voting** and **Quadratic Voting**.
 
