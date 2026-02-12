@@ -1,7 +1,7 @@
 # API Reference
 
 
-# 🌍 Environment
+# Environment
 
 ::: eci.environment.Environment
     options:
@@ -10,19 +10,19 @@
         - create_data_frame
         - initialize_network
 
-# 🤖 Agents
+# Agents
 
 ::: eci.agents.Voter
 ::: eci.agents.Candidate
 ::: eci.agents.Agent
 
-# 🗳️ Voting Systems
+# Voting Systems
 
 ::: eci.voting_system.plurality
 ::: eci.voting_system.quadratic
 ::: eci.voting_system.random_voting
 
-# 🤖 Decision Making
+# Decision Making
 
 ::: eci.voting_system.decisions
 ::: eci.voting_system.beliefs
@@ -32,7 +32,6 @@
         - _get_pref_candidate_gap
 
 
-# 🛠️ Utilities & Tools
+# Metrics
 
-## Metrics
 ::: eci.metrics
