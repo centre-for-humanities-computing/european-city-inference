@@ -277,8 +277,6 @@ class Environment:
         Tuple
             Last attributes and node trajectories.
         """
-        # Note: Modifying 'network' here relies on side-effects which is risky in JAX.
-        # Ensure 'network' handles state correctly if parallelized.
         network.attributes[-1]["preferences"] = {"mean": mu, "precision": pi}
         preferences_idx = network.input_idxs
         for idx in preferences_idx:
@@ -309,6 +307,5 @@ class Environment:
         self.preferences_idx = self.network.input_idxs
 
         # Distribute batched results back to individual agent objects
-        # Uses tree_map because vmap returns a struct of arrays (batch dim inside)
         for i, voter in enumerate(self.voters):
             voter.trajectory = tree_map(lambda x: x[i], self.node_trajectories)

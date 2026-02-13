@@ -1,31 +1,58 @@
-name: ci 
+name: CI
+
 on:
   push:
-    branches:
-      - main
-      - master
-
-permissions:
-  contents: write
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
 
 jobs:
-  deploy:
+  tests:
+    name: Run Tests & Lint
     runs-on: ubuntu-latest
+    
     steps:
       - uses: actions/checkout@v4
-      
-      - name: Install uv
-        uses: astral-sh/setup-uv@v5
-        
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version-file: "pyproject.toml"
 
-      - name: Install the project
-        # Installe les dépendances définies dans pyproject.toml (incluant mkdocs, etc.)
+      # install uv
+      - name: Install uv
+        uses: astral-sh/setup-uv@v1
+        with:
+          version: "latest"
+          enable-cache: true
+
+      # install python
+      - name: Set up Python
+        run: uv python install 3.12
+
+      # dependancies
+      - name: Install dependencies
         run: uv sync --all-extras --dev
 
-      - name: Deploy documentation
-        # Génère et déploie sur la branche 'gh-pages'
-        run: uv run mkdocs gh-deploy --force
+      # format check
+      - name: Lint with Ruff
+        run: |
+          uv run ruff format --check .
+          uv run ruff check .
+
+      # unit test
+      - name: Run Tests with pytest
+        run: uv run pytest tests --cov=src --cov-report=html --cov-report=term --cov-report=xml
+
+      # notebook test
+      - name: Test Notebooks execution
+        run: uv run python -m nbconvert notebooks/*.ipynb --to notebook --execute --inplace
+
+      # save report
+      - name: Upload Coverage Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: htmlcov/
+
+      # summary
+      - name: Coverage Summary
+        if: always() # S'exécute même si les tests échouent un peu
+        run: |
+          echo "## 📊 Coverage Report" >> $GITHUB_STEP_SUMMARY
+          uv run coverage report --format=markdown >> $GITHUB_STEP_SUMMARY

@@ -23,7 +23,7 @@ theme:
     - content.code.annotate  
   palette:
     - scheme: default
-      primary: indigo
+      primary: light blue
       accent: amber
       toggle:
         icon: material/weather-sunny
