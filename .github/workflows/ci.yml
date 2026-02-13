@@ -47,11 +47,11 @@ jobs:
         run: uv run python -m nbconvert notebooks/*.ipynb --to notebook --execute --inplace
 
       # save report
-      - name: Upload Coverage Report
-        uses: actions/upload-artifact@v4
-        with:
-          name: coverage-report
-          path: htmlcov/
+      #- name: Upload Coverage Report
+      #  uses: actions/upload-artifact@v4
+      #  with:
+      #    name: coverage-report
+      #    path: htmlcov/
 
       # summary
       - name: Coverage Summary
