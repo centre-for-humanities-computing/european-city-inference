@@ -2,14 +2,14 @@ import jax
 import jax.numpy as jnp
 from jax.typing import ArrayLike
 
-from eci.utils import kl_divergence
+from eci.voting_system.beliefs import _get_pref_belief_gap, _get_pref_candidate_gap
 
 
 def _sample_choice(
     key: ArrayLike, preferences: ArrayLike
 ) -> tuple[ArrayLike, ArrayLike]:
     """
-    Sample a choice using a softmax distribution over preferences.
+    Sample a choice using a softmax probabilities over preferences.
 
     Parameters
     ----------
@@ -20,7 +20,7 @@ def _sample_choice(
 
     Returns
     -------
-        vote: An array of chosen option.
+        vote: An array containing the chosen option.
         softmax_probs: The resulting softmax probability distribution.
     """
     # Calculate softmax per preference (for the return)
@@ -32,18 +32,15 @@ def _sample_choice(
     return vote, softmax_probs
 
 
-def _compute_option_preferences(
-    env,
-    preference_means: ArrayLike,
-    preference_precisions: ArrayLike,
-    pref_belief_gap: ArrayLike,
+def _compute_preferences(
+    data: dict,
 ) -> ArrayLike:
     """Evaluate the preference score for each possible choice.
 
     Parameters
     ----------
-    env:
-        The environment object.
+    data:
+        The dictionary returned by _extract_env_data_vectorized containing
     preference_means:
         the mean preference of agents for each preference.
     preference_precisions:
@@ -55,24 +52,14 @@ def _compute_option_preferences(
     -------
         preference for each choice
     """
-    candidate_preferences_per_agent = []
-    candidate_list = [(c.policy["mean"], c.policy["precision"]) for c in env.candidates]
+    # Shape: (n_agents,)
+    pref_belief_gap = _get_pref_belief_gap(data)
 
-    # Calculate KL for all agents against candidates
-    for mean_policy, precision_policy in candidate_list:
-        preference_policy_gap = kl_divergence(
-            preference_means,
-            preference_precisions,
-            mean_policy.reshape(-1),
-            precision_policy.reshape(-1),
-        )
+    # Shape: (n_agents, n_candidates)
+    pref_candidate_gap = _get_pref_candidate_gap(data)
 
-        # Sum over preferences
-        preference_policy_gap = jnp.sum(preference_policy_gap, axis=1)
-
-        # agent prefer choice what reduce their preference_belief gap
-        preference_score_per_agent = pref_belief_gap - preference_policy_gap
-        candidate_preferences_per_agent.append(preference_score_per_agent)
+    # (n_agents, 1) - (n_agents, n_candidates) -> (n_agents, n_candidates)
+    preference_score_per_agent = pref_belief_gap[:, jnp.newaxis] - pref_candidate_gap
 
     # Stack the candidate scores
-    return jnp.stack(candidate_preferences_per_agent).T
+    return preference_score_per_agent, pref_candidate_gap, pref_belief_gap

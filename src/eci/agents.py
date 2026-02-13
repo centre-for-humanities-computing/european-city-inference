@@ -1,4 +1,4 @@
-from abc import ABC, abstractmethod
+from abc import ABC
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
@@ -18,21 +18,6 @@ class Agent(ABC):
     """
 
     id: int
-
-    @abstractmethod
-    def step(self, env: Any) -> None:
-        """Define the agent's action during a single simulation step.
-
-        This method must be implemented by all subclasses. It contains the
-        logic for what the agent does during its activation.
-
-        Parameters
-        ----------
-        environment
-            The environment in which the agent exists, providing access to
-            global state and other agents if needed.
-        """
-        pass
 
 
 @dataclass
@@ -89,24 +74,6 @@ class Voter(Agent):
     trajectory: Optional[Any] = None
     observation: Optional[Any] = None
 
-    def step(self, env: Any) -> None:
-        """Perform the voter's action for a step.
-
-        Parameters
-        ----------
-        environment
-            The environment in which the agent exists, providing access to
-            candidate policies and other relevant information.
-
-        Notes
-        -----
-        In this model, the core voting logic is handled externally by the
-        vectorized JAX functions in the `Environment`. This method is a
-        placeholder for any additional, non-vectorized actions a voter
-        might take.
-        """
-        pass
-
 
 @dataclass
 class Candidate(Agent):
@@ -130,20 +97,3 @@ class Candidate(Agent):
 
     # State attribute with a default value
     vote_count: int = 0
-
-    def step(self, env: Any) -> None:
-        """Perform the candidate's action for a step.
-
-        Parameters
-        ----------
-        environment :
-            The environment in which the agent exists, providing access to
-            global state, voter data, and other agents.
-
-        Notes
-        -----
-        This method could be used to implement dynamic behaviors, such as
-        a candidate changing their policy platform in response to voter
-        opinions (i.e., campaigning).
-        """
-        pass

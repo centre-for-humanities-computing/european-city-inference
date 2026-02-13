@@ -1,143 +1,88 @@
-# Agent-Based Political Election Simulator
+# European City Inference (ECI)
 
-This project provides an agent-based model (ABM) for simulating political elections. It uses the **Hierarchical Gaussian Filter (HGF)** via the `pyhgf` library to model how individual voters update their beliefs over time.
+[![Tests](https://img.shields.io/badge/tests-passing-green?style=flat-square&logo=github)](https://github.com/sylvainestebe/european-city-inference/actions)
+[![Python](https://img.shields.io/badge/python-3.12-blue?style=flat-square&logo=python)](https://www.python.org/)
+[![License](https://img.shields.io/badge/license-MIT-purple?style=flat-square)](LICENSE)
+[![Code Style](https://img.shields.io/badge/code%20style-ruff-000000.svg?style=flat-square)](https://github.com/astral-sh/ruff)
 
-## Project Structure
+**Agent-Based Political Election Simulator using Predictive Coding.**
 
-```text
-├── src/
-│   ├── eci/
-│   │   └── voting_system/       # Core voting logic and mechanisms
-│   │       ├── beliefs.py       # Handling agent beliefs and preferences
-│   │       ├── decision.py      # Decision-making algorithms
-│   │       ├── plurality.py     # Plurality voting implementation
-│   │       ├── quadratic.py     # Quadratic voting implementation
-│   │       └── random_voting.py # Randomized voting for baseline comparisons
-│   ├── adapter.py               # Adapters for data transformation/interfaces
-│   ├── agents.py                # Agent definitions and behaviors
-│   ├── environment.py           # Simulation environment logic
-│   ├── utils.py                 # Helper functions and shared utilities
-│   └── visualizer.py            # Tools for rendering simulation results
-├── notebooks/                   # Tutorials
-├── tests/                       
-├── pyproject.toml               # Project configuration and dependencies (uv)
-└── Makefile                     # Automation commands
+ECI is a Agent-Based simulation designed to model collective decision-making in volatile political environments. Built on top of **JAX** and **PyHGF** (Hierarchical Gaussian Filter), it simulates how thousands of voters update their beliefs and cast votes under different voting systems (Plurality, Quadratic Voting).
+
+## Key Features
+
+* **Cognitive Agents:** Voters employ **Bayesian belief updating** as implemented in **hierarchical predictive coding networks**, together with an **uncertainty-informed decision-making process** to select the most relevant candidate for them.
+* **Multi-Voting Systems:** Compare outcomes between **Plurality Voting** and **Quadratic Voting**.
+
+## Installation
+
+This project uses `uv` for Python package management.
+
+```bash
+# 1. Clone the repository
+git clone [https://github.com/sylvainestebe/european-city-inference.git](https://github.com/sylvainestebe/european-city-inference.git)
+cd european-city-inference
+
+# 2. Install dependencies
+make install
+
 ```
 
 ## Quick Start
 
-### Installation
-
-This project uses `uv` for package management.
-
-```bash
-# Install all dependencies from pyproject.toml
-make install
-```
-
-## How it Work
-
-You can use notebook: tutorial_1 to understand how the decision making process work and tutorial 2 to understand how it work under different agents. 
-
-### 1. Create the Environment
-
-The `Environment` is the container for all agents (Voters and Candidates).
-
-**Code:**
-
-```python
-from eci.environment import Environment
-
-# 1. Define the dimensions of the simulation
-NUM_VOTERS = 200        # Total number of voters
-NUM_CANDIDATES = 6      # Total number of candidates running
-NUM_PREFERENCES = 4     # Number of policy dimensions (e.g., Economy, Social, etc.)
-
-# Set the number of simulation
-NUM_SIMULATIONS = 100
-env.num_simulations = NUM_SIMULATIONS
-
-# 2. Initialize the environment object
-env = Environment(
-    num_voters=NUM_VOTERS,
-    num_candidates=NUM_CANDIDATES,
-    num_preferences=NUM_PREFERENCES,
-)
-
-```
-
-### 2. Configure Agents (Voters & Candidates)
-
-Once the environment is created, you can change the "preference" and "policies" of the agents. 
-
-* **Candidates:** Defined by their policy stance (`mean`) and how precise they are (`precision`).
-* **Voters:** Defined by their preference (`mean`) and how strongly they hold those preferences (`precision`).
-
-**Code Example:**
-
-```python
-import jax.numpy as jnp
-
-# We loop through the first 5 voters and give them specific preferences
-for i in range(5):
-    env.voters[i].preferences["mean"] = jnp.array([-1.0, -1.0, -1.0, -1.0]) # Important, the shape of preferences should match the number decided in parameters
-    
-    # Higher value = higher certainty
-    env.voters[i].preferences["precision"] = jnp.array([0.4, 0.2, 0.6, 0.2])
-
-# Configure a Candidate
-env.candidates[0].policy["mean"] = jnp.array([1, 1, 1, 1])
-env.candidates[0].policy["precision"] = jnp.array([0.4, 0.4, 0.4, 0.4])
-
-```
-
-### 3. Launch Simulation
-
-To run a simulation, you must initialize the agents' internal models.
+Here is a minimal example to run a simulation with 200 voters and 6 candidates:
 
 ```python
 import jax
-from eci.voting_system.random import _vote_random
+from eci.environment import Environment, EnvConfig
+from eci.voting_system.random_voting import _vote_random
 
-# 1. Initialize the HGF network for all agents
-env.initialize_network()
+# 1. Configure the Environment
+config = EnvConfig(
+    num_voters=200, 
+    num_candidates=6, 
+    num_preferences=4,
+    seed=42
+)
 
-# 2. Initialize a JAX PRNGKey for reproducibility
+# 2. Initialize Simulation
+env = Environment(config)
+
+# 3. Run Simulation (100 iterations)
 key = jax.random.PRNGKey(42)
-
-# 3. Run N simulations with a specific voting system
-# The simulator supports: _vote_plurality, _vote_quadratic, and _vote_random
-sim = env.run_n_simulation(_vote_random, key, NUM_SIMULATIONS)
-
-# 4. Update the agents' internal states based on simulation results
-env._update_agents()
-
-# 5. Create a DataFrame for analysis and plotting
-env.df = env.create_data_frame()
+results = env.run_n_simulation(_vote_random, key, n_simulations=100)
 
 ```
 
-The simulator supports various ways to aggregate agent decisions:
+## 📂 Project Structure
 
-* **Plurality Voting (`_vote_plurality`)**: Standard winner-take-all system.
-* **Quadratic Voting (`_vote_quadratic`)**: Allows voters to express the intensity of their preferences.
-* **Random Voting (`_vote_random`)**: Used as a baseline for comparison.
-
-
-## 📚 Documentation and Tutorials
-
-> **Note:** Full official documentation and detailed interactive tutorials are currently being drafted and will be available very soon.
-> 
-
-If you use this code or data in a scientific publication, please cite:
-
+```text
+├── src/eci/
+│   ├── agents.py           # Voter and Candidate definitions
+│   ├── environment.py      # Main simulation loop
+│   └── voting_system/      # Plurality, Quadratic, and Decision logic
+├── notebooks/              # tutorials
+├── tests/                  # Pytest suite
+└── docs/                   # Documentation sources
 
 ```
+
+## 📚 Documentation
+
+Full documentation and tutorials are available at:
+
+👉 **[https://centre-for-humanities-computing.github.io/european-city-inference//](https://centre-for-humanities-computing.github.io/european-city-inference//)**
+
+## Citation
+
+If you use this software in your research, please cite:
+
+```bibtex
 @software{political_abm2025,
   author    = {Sylvain Estebe, Nicolas Legrand},
-  title     = {collective decision-making in volatile political environments using quadratic voting}, 
+  title     = {Collective Decision-Making in Volatile Political Environments}, 
   year      = {2025},
-  publisher = {GitHub},
-  url       = {https://github.com/SylvainEstebe/votre_repo},
+  url       = {[https://github.com/sylvainestebe/european-city-inference](https://github.com/sylvainestebe/european-city-inference)},
 }
+
 ```

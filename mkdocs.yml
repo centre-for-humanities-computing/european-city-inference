@@ -1,0 +1,91 @@
+site_name: ECI Documentation
+site_url: https://github.com/centre-for-humanities-computing/european-city-inference
+repo_url: https://github.com/centre-for-humanities-computing/european-city-inference
+repo_name: sylvainestebe/european-city-inference
+edit_uri: edit/main/docs/ 
+site_description: "Agent-Based Political Election Simulator Documentation"
+site_author: Sylvain Estebe
+
+theme:
+  name: material
+  logo: assets/logo.svg
+  favicon: assets/logo.svg
+  features:
+    - navigation.instant     
+    - navigation.tracking    
+    - navigation.top         
+    - navigation.tabs
+    - content.code.annotate
+    - content.tabs.link
+    - navigation.sections    
+    - toc.integrate          
+    - content.code.copy      
+    - content.code.annotate  
+  palette:
+    - scheme: default
+      primary: light blue
+      accent: amber
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to dark mode
+    - scheme: slate
+      primary: indigo
+      accent: amber
+      toggle:
+        icon: material/weather-night
+        name: Switch to light mode
+plugins:
+  - search
+  - mkdocs-jupyter:
+      include_source: True
+      ignore_h1_titles: True
+  - mkdocstrings:
+        handlers:
+          python:
+            paths: [src]
+            options:
+              docstring_style: numpy     # CRUCIAL : Transforme le texte en tableaux structurés
+              show_source: true          # Affiche un bouton pour voir le code source
+              show_root_heading: true    # Affiche le nom de la classe en gros titre
+              show_category_heading: true # Sépare "Attributes", "Methods", "Classes"
+              show_signature_annotations: true # Affiche les types (int, float, etc.)
+              separate_signature: true   # Met les arguments sur des lignes séparées (plus lisible)
+              unwrap_annotated: true     # Nettoie les types complexes
+              merge_init_into_class: true # Affiche les arguments de __init__ directement sous la classe
+markdown_extensions:
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - md_in_html
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.arithmatex:
+      generic: true
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+
+  - attr_list  
+  - pymdownx.details
+  - pymdownx.emoji:
+        emoji_index: !!python/name:material.extensions.emoji.twemoji
+        emoji_generator: !!python/name:material.extensions.emoji.to_svg
+extra_javascript:
+  - https://polyfill.io/v3/polyfill.min.js?features=es6
+  - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
+  - javascripts/mathjax.js
+nav:
+  - Home: index.md
+  - Glossary: glossary.md
+  - Tutorials:
+      - Decision Making: tutorials/tutorial_1_decision_making.ipynb
+      - Voting System: tutorials/tutorial_2_voting_system.ipynb
+      - Polarization: tutorials/tutorial_3_polarization.ipynb
+  - API Reference: api.md
+  - Algorithms: algorithms.md

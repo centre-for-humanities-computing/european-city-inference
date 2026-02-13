@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+    <url>
+         <loc>https://github.com/centre-for-humanities-computing/european-city-inference/</loc>
+         <lastmod>2026-02-13</lastmod>
+    </url>
+    <url>
+         <loc>https://github.com/centre-for-humanities-computing/european-city-inference/algorithms/</loc>
+         <lastmod>2026-02-13</lastmod>
+    </url>
+    <url>
+         <loc>https://github.com/centre-for-humanities-computing/european-city-inference/api/</loc>
+         <lastmod>2026-02-13</lastmod>
+    </url>
+    <url>
+         <loc>https://github.com/centre-for-humanities-computing/european-city-inference/glossary/</loc>
+         <lastmod>2026-02-13</lastmod>
+    </url>
+    <url>
+         <loc>https://github.com/centre-for-humanities-computing/european-city-inference/tutorials/tutorial_1_decision_making/</loc>
+         <lastmod>2026-02-13</lastmod>
+    </url>
+    <url>
+         <loc>https://github.com/centre-for-humanities-computing/european-city-inference/tutorials/tutorial_2_voting_system/</loc>
+         <lastmod>2026-02-13</lastmod>
+    </url>
+    <url>
+         <loc>https://github.com/centre-for-humanities-computing/european-city-inference/tutorials/tutorial_3_polarization/</loc>
+         <lastmod>2026-02-13</lastmod>
+    </url>
+</urlset>
