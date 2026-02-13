@@ -153,7 +153,7 @@ def plot_vote_shares(
 
 
 def plot_belief_trajectory(
-    means: np.ndarray,
+    expected_mean: np.ndarray,
     precisions: np.ndarray,
     observations: np.ndarray,
     preference_params: Tuple[float, float],
@@ -166,7 +166,7 @@ def plot_belief_trajectory(
 
     Parameters
     ----------
-    means : np.ndarray
+    expected_mean : np.ndarray
         Array of mean beliefs over time.
     precisions : np.ndarray
         Array of precisions (inverse variance) over time.
@@ -214,11 +214,11 @@ def plot_belief_trajectory(
         alpha=0.4,
         label="Observations",
     )
-    ax_main.plot(means, c="#D62728", lw=2.5, label="Belief (Mean)")
+    ax_main.plot(expected_mean, c="#D62728", lw=2.5, label="Belief (Mean)")
     ax_main.fill_between(
         time_steps,
-        means - ci_bound,
-        means + ci_bound,
+        expected_mean - ci_bound,
+        expected_mean + ci_bound,
         color="#D62728",
         alpha=0.1,
         label="95% CI",

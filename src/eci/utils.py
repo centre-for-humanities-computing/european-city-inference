@@ -199,8 +199,8 @@ def get_voter_trajectory_data(env, voter_id: int, pref_idx: int = 0):
     """Retrieve specific arrays for a single voter's belief trajectory."""
     voter = next(v for v in env.voters if v.id == voter_id)
     return {
-        "means": voter.trajectory["expected_mean"][voter.id],
-        "precisions": voter.trajectory["precision"][voter.id],
+        "expected_mean": voter.trajectory[0]["expected_mean"],
+        "precisions": voter.trajectory[0]["precision"],
         "observations": env.input_data[:, pref_idx],
         "preference_params": (
             voter.preferences["mean"][pref_idx],
