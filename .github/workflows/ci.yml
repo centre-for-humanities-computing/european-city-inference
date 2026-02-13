@@ -54,8 +54,8 @@ jobs:
       #    path: htmlcov/
 
       # summary
-      - name: Coverage Summary
-        if: always()
-        run: |
-          echo "## 📊 Coverage Report" >> $GITHUB_STEP_SUMMARY
-          uv run coverage report --format=markdown >> $GITHUB_STEP_SUMMARY
+      #- name: Coverage Summary
+      #  if: always()
+      #  run: |
+      #    echo "## 📊 Coverage Report" >> $GITHUB_STEP_SUMMARY
+      #    uv run coverage report --format=markdown >> $GITHUB_STEP_SUMMARY
