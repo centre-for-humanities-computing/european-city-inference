@@ -35,6 +35,9 @@ jobs:
           uv run ruff format --check .
           uv run ruff check .
 
+      - name: Install Graphviz
+        run: sudo apt-get update && sudo apt-get install -y graphviz
+        
       # unit test
       #- name: Run Tests with pytest
       #  run: uv run pytest tests --cov=src --cov-report=html --cov-report=term --cov-report=xml
