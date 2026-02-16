@@ -3,82 +3,103 @@ from unittest.mock import MagicMock, patch
 import jax
 import jax.numpy as jnp
 
-from eci.voting_system.plurality import _find_top_two_winners, _vote_plurality
+# Import the functions to test
+from eci.voting_system.plurality import (
+    _find_top_two_winners,
+    _vote_plurality,
+    strategic_vote,
+)
 
 
-class MockCandidate:
-    """A mock class representing a candidate."""
+class TestPluralityVoting:
+    """Test plurality voting."""
 
-    def __init__(self, id, mean, precision):
-        self.id = id
-        self.policy = {"mean": jnp.array(mean), "precision": jnp.array(precision)}
+    def test_find_top_two_winners_clear_winner(self):
+        """Test that the top 2 are found correctly when counts are distinct."""
+        votes = jnp.array([1, 1, 1, 0])
+        winners = _find_top_two_winners(votes, num_candidates=3)
+        assert winners[0] == 1
+        assert winners[1] == 0
 
+    def test_find_top_two_winners_tie(self):
+        """Test behavior when there is a tie for 2nd place."""
+        votes = jnp.array([0, 0, 1, 2])
+        winners = _find_top_two_winners(votes, num_candidates=3)
 
-class MockEnv:
-    """A mock environment class."""
+        assert winners[0] == 0
+        assert winners[1] in [
+            1,
+            2,
+        ]  # JAX top_k is deterministic but implementation dependent
 
-    def __init__(self, candidates, voters_count, preferences_idx, last_attributes):
-        self.candidates = candidates
-        self.voters = list(range(voters_count))
-        self.preferences_idx = preferences_idx
-        self.last_attributes = last_attributes
-        self.use_theory_of_mind = False  # Default for test
+    @patch("eci.voting_system.plurality._sample_choice")
+    @patch("eci.voting_system.plurality._compute_preferences")
+    @patch("eci.voting_system.plurality._extract_env_data_vectorized")
+    def test_vote_plurality_round_logic(self, mock_extract, mock_compute, mock_sample):
+        """Verifies the 2-Round Plurality Logic."""
+        mock_extract.return_value = {}
+        fake_prefs = jnp.array([[1.0, 1.0, 1.0], [1.0, 1.0, 1.0], [1.0, 1.0, 1.0]])
+        mock_compute.return_value = (fake_prefs, "gap1", "gap2")
 
+        def sample_side_effect(key, prefs):
+            is_round_2 = jnp.any(prefs == -jnp.inf)
 
-def test_find_top_two_winners():
-    """Tests the `_find_top_two_winners` function."""
-    # Case 1: clear winners (0: 3 votes, 1: 2 votes, 2: 1 vote)
-    votes = jnp.array([0, 0, 0, 1, 1, 2])
-    winners = _find_top_two_winners(votes)
-    assert winners[0] == 0
-    assert winners[1] == 1
+            if not is_round_2:
+                votes = jnp.array([0, 1, 0])
+                return votes, jnp.zeros_like(prefs)
+            else:
+                votes = jnp.array([0, 0, 0])
+                return votes, jnp.zeros_like(prefs)
 
-    # Case 2: tie (0 and 1 both have 1 vote)
-    votes = jnp.array([0, 1])
-    winners = _find_top_two_winners(votes)
-    assert len(winners) == 2
+        mock_sample.side_effect = sample_side_effect
 
-    # Case 3: only one candidate (0 wins, 0 is runner-up)
-    votes = jnp.array([0, 0])
-    winners = _find_top_two_winners(votes)
-    assert winners[0] == 0
-    assert winners[1] == 0
-
-
-def test_vote_plurality():
-    """Tests simulating a two-round plurality election."""
-    with (
-        patch("eci.voting_system.plurality._get_current_beliefs"),
-        patch("eci.voting_system.plurality._get_pref_belief_gap"),
-        patch(
-            "eci.voting_system.plurality._compute_option_preferences"
-        ) as mock_compute_prefs,
-    ):
-        # Mocking preferences: C0 wins with 2 votes, C1 gets 1 vote, C2 gets 0.
-        prefs = jnp.array([[100.0, 0.0, 0.0], [100.0, 0.0, 0.0], [0.0, 100.0, 0.0]])
-        mock_compute_prefs.return_value = prefs
-
-        # Setup mock environment and candidates with distinct IDs
-        c0 = MagicMock()
-        c0.id = 100
-        c1 = MagicMock()
-        c1.id = 101
-        c2 = MagicMock()
-        c2.id = 102
-        env = MagicMock()
-        env.candidates = [c0, c1, c2]
         key = jax.random.PRNGKey(42)
-
+        env = MagicMock()
         results = _vote_plurality(env, key)
 
-        # Assert Round 1 outcomes
-        assert "first_round_winners" in results
-        winners_r1 = results["first_round_winners"]
-        # C0 and C1 should be the winners
-        assert 100 in winners_r1
-        assert 101 in winners_r1
+        assert results["final_winner"] == 0
+        assert jnp.array_equal(
+            jnp.sort(results["first_round_winners"]), jnp.array([0, 1])
+        )
 
-        # Assert Final Round outcomes
-        assert "final_winner" in results
-        # C0 should be the ultimate winner
-        assert results["final_winner"] == 100
+        assert mock_sample.call_count == 2
+
+        args_round_2, _ = mock_sample.call_args
+        prefs_passed_round_2 = args_round_2[1]
+
+        assert jnp.all(prefs_passed_round_2[:, 2] == -jnp.inf)
+        assert jnp.all(prefs_passed_round_2[:, 0] != -jnp.inf)
+
+    @patch("eci.voting_system.plurality._vote_plurality")
+    @patch("eci.voting_system.plurality._compute_preferences")
+    @patch("eci.voting_system.plurality._extract_env_data_vectorized")
+    def test_strategic_vote_weighting(
+        self, mock_extract, mock_compute, mock_plurality_func
+    ):
+        """Verifies that Strategic Vote."""
+        poll_probs = jnp.array([[0.9, 0.1], [0.9, 0.1]])
+
+        mock_poll_results = {"softmax_probs_round_1": poll_probs, "final_winner": 0}
+
+        mock_final_results = {"final_winner": 0, "strategy_used": "yes"}
+
+        mock_plurality_func.side_effect = [mock_poll_results, mock_final_results]
+
+        base_prefs = jnp.array([[1.0, 1.0], [1.0, 1.0]])
+        mock_compute.return_value = (base_prefs, None, None)
+
+        env = MagicMock()
+        key = jax.random.PRNGKey(0)
+        results = strategic_vote(env, key)
+
+        assert mock_plurality_func.call_count == 2
+
+        call_args_2 = mock_plurality_func.call_args_list[1]
+        kwargs_2 = call_args_2.kwargs
+
+        assert "custom_preferences" in kwargs_2
+
+        expected_adjusted = jnp.array([[0.9, 0.1], [0.9, 0.1]])
+
+        assert jnp.allclose(kwargs_2["custom_preferences"], expected_adjusted)
+        assert results["strategy_used"] == "weighted_by_expected_results"

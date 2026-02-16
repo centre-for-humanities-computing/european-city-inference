@@ -1,93 +1,75 @@
 import jax.numpy as jnp
+import pytest
 
-from eci.voting_system.beliefs import (
-    _extract_candidates_data,
-    _get_current_beliefs,
-    _get_pref_belief_gap,
-)
+from eci.voting_system.beliefs import _get_pref_belief_gap, _get_pref_candidate_gap
 
 
-class MockCandidate:
-    """Represent a candidate in the voting system."""
+@pytest.fixture
+def mock_voting_data():
+    """Create a mock data dictionary."""
+    n_agents = 2
+    n_candidates = 2
+    n_dim = 3
 
-    def __init__(self, mean, precision):
-        self.policy = {"mean": jnp.array(mean), "precision": jnp.array(precision)}
-
-
-class MockEnv:
-    """Simulates the necessary environment attributes."""
-
-    def __init__(self, candidates, voters_count, preferences_idx, last_attributes):
-        self.candidates = candidates
-        self.voters = list(range(voters_count))
-        self.preferences_idx = preferences_idx
-        self.last_attributes = last_attributes
-
-
-def test_extract_candidates_data():
-    """Verifies that the function correctly extracts the policy mean and precision."""
-    c1 = MockCandidate([1.0], [10.0])
-    c2 = MockCandidate([2.0], [5.0])
-    env = MockEnv([c1, c2], 0, [], [])
-
-    means, precisions = _extract_candidates_data(env)
-
-    assert means.shape == (2, 1)
-    assert precisions.shape == (2, 1)
-    assert jnp.allclose(means, jnp.array([[1.0], [2.0]]))
-    assert jnp.allclose(precisions, jnp.array([[10.0], [5.0]]))
-
-
-def test_get_current_beliefs():
-    """Checks if the function correctly parses the environment."""
-    # Setup
-    c1 = MockCandidate([0.0], [1.0])
-
-    # 2 agents, 1 preference dimension
-    voters_count = 2
-    preferences_idx = [0]
-
-    # Mock agent data
-    attr_0 = {"expected_mean": [0.5, 0.6], "precision": [2.0, 3.0]}
-    pref_data = {"mean": [[1.0], [2.0]], "precision": [[10.0], [20.0]]}
-
-    last_attributes = {0: attr_0, -1: {"preferences": pref_data}}
-
-    env = MockEnv([c1], voters_count, preferences_idx, last_attributes)
-
-    data = _get_current_beliefs(env)
-
-    assert len(data) == 2
-    assert jnp.allclose(data[0]["means_belief"], jnp.array([0.5]))
-    assert jnp.allclose(data[1]["means_preference"], jnp.array([2.0]))
-    assert jnp.allclose(data[0]["precisions_belief"], jnp.array([2.0]))
-    assert jnp.allclose(data[1]["precision_preference"], jnp.array([20.0]))
-
-
-def test_get_pref_belief_gap():
-    """Verifie that the function correctly calculates the gap."""
-    # Setup a simple dictionary as returned by _get_current_beliefs
-    # Agent 0: KL=0 (Belief=Pref)
-    # Agent 1: KL=0.5 (Belief vs Pref difference of 1, precision 1)
-
-    agent0 = {
-        "means_belief": jnp.array([0.0]),
-        "precisions_belief": jnp.array([1.0]),
-        "means_preference": jnp.array([0.0]),
-        "precision_preference": jnp.array([1.0]),
+    return {
+        "beliefs": {
+            "mean": jnp.zeros((n_agents, n_dim)),
+            "precision": jnp.ones((n_agents, n_dim)),
+        },
+        "preferences": {
+            "mean": jnp.zeros((n_agents, n_dim)),
+            "precision": jnp.ones((n_agents, n_dim)),
+        },
+        "candidates": {
+            "mean": jnp.zeros((n_candidates, n_dim)),
+            "precision": jnp.ones((n_candidates, n_dim)),
+        },
     }
 
-    agent1 = {
-        "means_belief": jnp.array([0.0]),
-        "precisions_belief": jnp.array([1.0]),
-        "means_preference": jnp.array([1.0]),
-        "precision_preference": jnp.array([1.0]),
-    }
 
-    all_agent_data = {0: agent0, 1: agent1}
-
-    gaps = _get_pref_belief_gap(all_agent_data)
+def test_get_pref_belief_gap_identical(mock_voting_data):
+    """If beliefs and preferences are identical, KL divergence sum should be 0."""
+    gaps = _get_pref_belief_gap(mock_voting_data)
 
     assert gaps.shape == (2,)
-    assert jnp.allclose(gaps[0], 0.0)
-    assert jnp.allclose(gaps[1], 0.5)
+    assert jnp.allclose(gaps, 0.0)
+
+
+def test_get_pref_belief_gap_value_check():
+    """Test with specific values to ensure summation works across dimensions."""
+    data = {
+        "beliefs": {
+            "mean": jnp.array([[1.0, 1.0]]),  # Agent 1
+            "precision": jnp.array([[1.0, 1.0]]),
+        },
+        "preferences": {
+            "mean": jnp.array([[0.0, 0.0]]),
+            "precision": jnp.array([[1.0, 1.0]]),
+        },
+    }
+    gaps = _get_pref_belief_gap(data)
+    assert jnp.isclose(gaps[0], 1.0)
+
+
+def test_get_pref_candidate_gap_broadcasting(mock_voting_data):
+    """Verify that every agent is compared against every candidate."""
+    gaps = _get_pref_candidate_gap(mock_voting_data)
+
+    assert gaps.shape == (2, 2)
+
+
+def test_get_pref_candidate_gap_values():
+    """Verify the broadcasting math for a specific agent-candidate pair."""
+    data = {
+        "preferences": {
+            "mean": jnp.array([[0.0]]),
+            "precision": jnp.array([[1.0]]),
+        },
+        "candidates": {
+            "mean": jnp.array([[1.0], [2.0]]),
+            "precision": jnp.array([[1.0], [1.0]]),
+        },
+    }
+    gaps = _get_pref_candidate_gap(data)
+
+    assert jnp.allclose(gaps, jnp.array([[0.5, 2.0]]))

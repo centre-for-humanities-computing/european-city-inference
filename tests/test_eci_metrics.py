@@ -1,149 +1,133 @@
 import jax.numpy as jnp
-import numpy as np
+import pandas as pd
 import pytest
 
 from eci.metrics import (
     _vote_efficiency,
     _winner_satisfaction,
+    batch_compute_metrics,
+    compute_metrics,
 )
 
 
-class TestWinnerSatisfaction:
-    """Unit tests for the _winner_satisfaction function."""
+class TestMetricsCalculations:
+    """Tests for individual metric functions."""
 
-    def test_nominal_case(self):
-        """Sum of preferences for the winning candidate."""
-        prefs = np.array([[3, 5, 2, 3, 2, 4], [2, 1, 4, 0, 3, 5]])
-        winner_idx = 2
-        assert _winner_satisfaction(prefs, winner_idx) == 6
+    def test_winner_satisfaction(self):
+        """Test that winner satisfaction sums the correct column of preferences."""
+        prefs = jnp.array([[10.0, 0.0, 0.0], [10.0, 5.0, 0.0], [10.0, 0.0, 0.0]])
 
-    # Boundary cases: First and last candidate
-    @pytest.mark.parametrize(
-        "winner_idx, expected_sum",
-        [
-            (0, 5),  # Column 0: 3 + 2 = 5
-            (5, 9),  # Column 5: 4 + 5 = 9
-            (-1, 9),  # Negative index (last element) supported by numpy/jax
-        ],
-    )
-    def test_boundaries_indices(self, winner_idx, expected_sum):
-        """Check that slicing works at the boundaries."""
-        prefs = np.array([[3, 5, 2, 3, 2, 4], [2, 1, 4, 0, 3, 5]])
-        assert _winner_satisfaction(prefs, winner_idx) == expected_sum
+        score_0 = _winner_satisfaction(prefs, winner=0)
+        assert score_0 == 30.0
 
-    # Input types: JAX vs NumPy compatibility
-    def test_jax_array_compatibility(self):
-        """Check that the function accepts both JAX and NumPy arrays."""
-        prefs_np = np.array([[1, 2], [3, 4]])
-        prefs_jax = jnp.array([[1, 2], [3, 4]])
-        winner = 1
+        score_1 = _winner_satisfaction(prefs, winner=1)
+        assert score_1 == 5.0
 
-        res_np = _winner_satisfaction(prefs_np, winner)
-        res_jax = _winner_satisfaction(prefs_jax, winner)
+    def test_vote_efficiency_perfect_match(self):
+        """Test efficiency when votes perfectly align with preferences."""
+        prefs = jnp.array([[10.0, 0.0]])
+        votes = jnp.array([[10, 0]])
 
-        assert res_np == 6
-        assert res_jax == 6
+        eff = _vote_efficiency(prefs, votes)
+        assert eff == 10.0
 
-    # Empty or zero values
-    def test_zeros_preferences(self):
-        """Check behavior if all preferences are zero."""
-        prefs = np.zeros((5, 3))  # 5 agents, 3 candidates
-        assert _winner_satisfaction(prefs, 0) == 0
+    def test_vote_efficiency_split_votes(self):
+        """Test efficiency when an agent splits votes between candidates."""
+        prefs = jnp.array([[10.0, 5.0]])
+        votes = jnp.array([[5, 5]])
 
-    def test_single_agent(self):
-        """Check the case with a single agent (1 row)."""
-        prefs = np.array([[10, 20, 30]])
-        # If only one agent, the winner's satisfaction is just their score
-        assert _winner_satisfaction(prefs, 1) == 20
+        eff = _vote_efficiency(prefs, votes)
+        assert eff == 7.5
 
-    # Error handling (Robustness)
-    def test_index_out_of_bounds(self):
-        """Check that an error is raised if the winner index does not exist."""
-        prefs = np.array([[1, 2], [3, 4]])  # 2 columns (index 0 and 1)
+    def test_vote_efficiency_zero_votes(self):
+        """Test that division by zero is handled (safe_tokens)."""
+        prefs = jnp.array([[10.0, 5.0]])
+        votes = jnp.array([[0, 0]])
 
-        # Try to access column 99
-        with pytest.raises(IndexError):
-            _winner_satisfaction(prefs, 99)
+        eff = _vote_efficiency(prefs, votes)
+        assert eff == 0.0
+        assert not jnp.isnan(eff)
+
+    def test_compute_metrics_integration(self):
+        """Test the wrapper function returns the expected dictionary."""
+        prefs = jnp.array([[10.0, 0.0]])
+        votes = jnp.array([[1, 0]])
+        winner = 0
+
+        metrics = compute_metrics(prefs, votes, winner)
+
+        assert "winner_satisfaction" in metrics
+        assert "vote_efficiency" in metrics
+        assert metrics["winner_satisfaction"] == 10.0
 
 
-class TestVoteEfficiency:
-    """Unit tests for the _vote_efficiency function."""
+class TestBatchMetrics:
+    """Tests for batch_compute_metrics with Plurality and Quadratic data."""
 
-    def test_single_agent_single_vote(self):
-        """Test with a single voter casting a single vote for one candidate."""
-        candidate_preferences = np.array([[0.1, 0.5, 0.2]])  # Preferences: [A, B, C]
-        votes_matrix = np.array([[1, 0, 0]])  # 1 vote for A
-        expected_efficiency = 0.1  # 0.1 (preference for A) / 1 (total votes)
-        assert (
-            _vote_efficiency(candidate_preferences, votes_matrix) == expected_efficiency
-        )
+    @pytest.fixture
+    def mock_plurality_results(self):
+        """Mock results for a Plurality Voting simulation."""
+        return {
+            0: {
+                "final_winner": 0,
+                "vote_round_1": jnp.array([0, 0]),
+                "candidate_preferences": jnp.array([[1.0, 0.0], [1.0, 0.0]]),
+                "softmax_probs_round_1": jnp.zeros((2, 2)),
+            },
+            1: {
+                "final_winner": 1,
+                "vote_round_1": jnp.array([1, 1]),  # Both voted 1
+                "candidate_preferences": jnp.array([[0.0, 1.0], [0.0, 1.0]]),
+                "softmax_probs_round_1": jnp.zeros((2, 2)),
+            },
+        }
 
-    def test_multiple_agents_single_vote(self):
-        """Test with multiple voters, each casting a single vote for one candidate."""
-        candidate_preferences = np.array(
-            [
-                [0.1, 0.5, 0.2],  # Voter 1
-                [0.3, 0.2, 0.8],  # Voter 2
-                [0.4, 0.7, 0.1],  # Voter 3
-            ]
-        )
-        votes_matrix = np.array(
-            [
-                [1, 0, 0],  # Voter 1: 1 vote for A
-                [0, 1, 0],  # Voter 2: 1 vote for B
-                [0, 0, 1],  # Voter 3: 1 vote for C
-            ]
-        )
-        # Expected efficiency: (0.1 + 0.2 + 0.1) = 0.4
-        expected_efficiency = 0.4
-        assert _vote_efficiency(candidate_preferences, votes_matrix) == pytest.approx(
-            expected_efficiency
-        )
+    @pytest.fixture
+    def mock_quadratic_results(self):
+        """Mock results for a Quadratic Voting simulation (has qv_votes_matrix)."""
+        return {
+            0: {
+                "final_winner": 0,
+                "qv_votes_matrix": jnp.array([[10, 0], [10, 0]]),
+                "candidate_preferences": jnp.array([[1.0, 0.0], [1.0, 0.0]]),
+                "softmax_probs_round_1": jnp.zeros((2, 2)),
+            }
+        }
 
-    def test_quadratic_voting_multiple_votes(self):
-        """Test with voters distributing their votes across multiple candidates."""
-        candidate_preferences = np.array(
-            [
-                [0.1, 0.5, 0.2],  # Voter 1
-                [0.3, 0.2, 0.8],  # Voter 2
-            ]
-        )
-        # Voter 1: 4 votes for A, 2 votes for B
-        # Voter 2: 2 votes for B, 1 vote for C
-        votes_matrix = np.array(
-            [
-                [4, 2, 0],  # Voter 1: 4 for A, 2 for B
-                [0, 2, 1],  # Voter 2: 2 for B, 1 for C
-            ]
-        )
-        expected_efficiency = 0.6333
-        assert _vote_efficiency(candidate_preferences, votes_matrix) == pytest.approx(
-            expected_efficiency
-        )
+    def test_batch_metrics_plurality(self, mock_plurality_results):
+        """Test processing of standard Plurality results (one-hot conversion)."""
+        df = batch_compute_metrics(mock_plurality_results)
 
-    def test_no_votes(self):
-        """Test with a voter casting no votes."""
-        candidate_preferences = np.array([[0.1, 0.5, 0.2]])
-        votes_matrix = np.array([[0, 0, 0]])  # No votes
-        expected_efficiency = 0.0
-        assert (
-            _vote_efficiency(candidate_preferences, votes_matrix) == expected_efficiency
-        )
+        assert isinstance(df, pd.DataFrame)
+        assert len(df) == 2  # 2 Simulations
+        assert "winner_satisfaction" in df.columns
+        assert "vote_efficiency" in df.columns
+        assert "simulation_id" in df.columns
 
-    def test_zero_preferences(self):
-        """Test with all candidate preferences set to zero."""
-        candidate_preferences = np.array([[0.0, 0.0, 0.0]])
-        votes_matrix = np.array([[1, 0, 0]])  # 1 vote for A (preference = 0)
-        expected_efficiency = 0.0
-        assert (
-            _vote_efficiency(candidate_preferences, votes_matrix) == expected_efficiency
-        )
+        row_0 = df[df["simulation_id"] == 0].iloc[0]
+        assert row_0["winner_satisfaction"] == 2.0
+        assert row_0["vote_efficiency"] == 2.0
 
-    def test_fractional_votes(self):
-        """Test with fractional votes (e.g., 0.5 vote)."""
-        candidate_preferences = np.array([[0.1, 0.5, 0.2]])
-        votes_matrix = np.array([[0.5, 0.3, 0.2]])
-        expected_efficiency = 0.24
-        assert _vote_efficiency(candidate_preferences, votes_matrix) == pytest.approx(
-            expected_efficiency
-        )
+    def test_batch_metrics_quadratic(self, mock_quadratic_results):
+        """Test processing of Quadratic results (uses qv_votes_matrix)."""
+        df = batch_compute_metrics(mock_quadratic_results)
+
+        assert len(df) == 1
+        row = df.iloc[0]
+
+        assert row["winner_satisfaction"] == 2.0
+        assert row["vote_efficiency"] == 2.0
+
+    def test_batch_metrics_alt_pref_key(self):
+        """Test that it handles 'pref_candidate_gap'."""
+        mock_data = {
+            0: {
+                "final_winner": 0,
+                "vote_round_1": jnp.array([0]),
+                "pref_candidate_gap": jnp.array([[5.0, 0.0]]),
+                "softmax_probs_round_1": jnp.zeros((1, 2)),
+            }
+        }
+
+        df = batch_compute_metrics(mock_data)
+        assert df.iloc[0]["winner_satisfaction"] == 5.0

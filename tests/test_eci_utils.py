@@ -1,199 +1,189 @@
+from unittest.mock import MagicMock
+
 import jax.numpy as jnp
 import numpy as np
 import pytest
-from jax import jit
 
-from eci.utils import generate_candidates, generate_observations, kl_divergence
+from eci.utils import (
+    _extract_env_data_vectorized,
+    _get_parameter_trajectory,
+    generate_observations,
+    get_voter_trajectory_data,
+    kl_divergence,
+)
 
 
 class TestKLDivergence:
-    """Unit tests for the kl_divergence function."""
+    """Tests for the kl_divergence function."""
 
-    def test_identity(self):
-        """Test: KL(P || P) must be 0."""
+    def test_kl_divergence_identical(self):
+        """KL divergence between identical distributions should be 0."""
         mean = jnp.array([1.0, 2.0])
-        prec = jnp.array([1.0, 0.5])
+        prec = jnp.array([1.0, 1.0])
+
+        # When P == Q, KL(P||Q) = 0
         kl = kl_divergence(mean, prec, mean, prec)
-        np.testing.assert_allclose(kl, 0.0, atol=1e-6)
+        assert jnp.allclose(kl, 0.0)
 
-    def test_theoretical_value(self):
-        """Test: Comparison with a theoretical value."""
-        kl = kl_divergence(
-            mean_belief=0.0, precision_belief=1.0, mean_pref=1.0, precision_pref=1.0
-        )
-        np.testing.assert_allclose(kl, 0.5, atol=1e-6)
+    def test_kl_divergence_known_values(self):
+        """Test against manual calculation."""
+        m_pref = jnp.array([0.0])
+        p_pref = jnp.array([1.0])  # var = 1
 
-    def test_non_negative(self):
-        """Test: KL must always be >= 0."""
-        rng = np.random.default_rng(42)
-        m1 = jnp.array(rng.normal(size=10))
-        m2 = jnp.array(rng.normal(size=10))
-        p1 = jnp.array(np.abs(rng.normal(size=10))) + 0.1
-        p2 = jnp.array(np.abs(rng.normal(size=10))) + 0.1
-        kl = kl_divergence(m1, p1, m2, p2)
-        assert jnp.all(kl >= -1e-7)
+        m_belief = jnp.array([1.0])
+        p_belief = jnp.array([1.0])  # var = 1
 
-    def test_asymmetry(self):
-        """Test: KL(A || B) != KL(B || A) generally."""
-        args_a = (0.0, 1.0)
-        args_b = (1.0, 0.5)
-        kl_ab = kl_divergence(*args_a, *args_b)
-        kl_ba = kl_divergence(*args_b, *args_a)
-        with pytest.raises(AssertionError):
-            np.testing.assert_allclose(kl_ab, kl_ba)
+        kl = kl_divergence(m_pref, p_pref, m_belief, p_belief)
+        assert jnp.isclose(kl, 0.5)
 
-    def test_broadcasting(self):
-        """Test: Correct handling of scalars vs arrays (Broadcasting)."""
-        mean_belief = 0.0
-        prec_belief = 1.0
-        mean_pref = jnp.array([0.0, 1.0, 2.0])
-        prec_pref = jnp.array([1.0, 1.0, 1.0])
-        kl = kl_divergence(mean_belief, prec_belief, mean_pref, prec_pref)
-        assert kl.shape == (3,)
-        assert kl[0] == 0.0
+    def test_kl_divergence_broadcasting(self):
+        """Ensure the function handles array broadcasting correctly."""
+        m_pref = jnp.array([[0.0], [10.0]])  # Shape (2, 1)
+        p_pref = jnp.array([[1.0], [1.0]])
 
-    def test_jit_compatibility(self):
-        """Test: That the function is currently JIT-compatible."""
-        jitted_kl = jit(kl_divergence)
-        jitted_kl(
-            jnp.array([0.0]), jnp.array([1.0]), jnp.array([0.0]), jnp.array([1.0])
+        m_belief = jnp.array([0.0])  # Shape (1,)
+        p_belief = jnp.array([1.0])
+
+        kl = kl_divergence(m_pref, p_pref, m_belief, p_belief)
+
+        assert kl.shape == (2, 1)
+        assert jnp.isclose(kl[0], 0.0)
+        assert kl[1] > 0.0
+
+
+class TestDataGeneration:
+    """Tests for generate_observations and trajectory logic."""
+
+    def test_get_parameter_trajectory_phase(self):
+        """Test 'phase' shock pattern (A -> B -> A)."""
+        n_steps = 10
+        s_time = 2
+        r_time = 5
+        params = ((1.0, 1.0), (10.0, 10.0))  # (Normal, Shock)
+
+        alpha, beta = _get_parameter_trajectory(
+            n_steps, s_time, r_time, "phase", "linear", params
         )
 
+        # Before shock
+        assert alpha[0] == 1.0
+        # During shock (indices 2, 3, 4)
+        assert np.all(alpha[2:5] == 10.0)
+        # After recovery (index 5+)
+        assert np.all(alpha[5:] == 1.0)
 
-class TestGenerateObservations:
-    """Unit tests for observation simulation (generate_observations)."""
+    def test_get_parameter_trajectory_sudden(self):
+        """Test 'sudden' shock pattern (A -> B...)."""
+        n_steps = 10
+        s_time = 5
+        r_time = 8
+        params = ((1.0, 1.0), (10.0, 10.0))
 
-    def test_output_shape_scenario_1(self):
-        """Test: Output shape (n_steps, n_nodes) for Scenario 1."""
-        n_nodes, n_steps = 5, 100
-        obs = generate_observations(n_nodes=n_nodes, n_steps=n_steps, scenario=1)
+        alpha, beta = _get_parameter_trajectory(
+            n_steps, s_time, r_time, "sudden", "linear", params
+        )
+
+        # Before shock
+        assert np.all(alpha[:5] == 1.0)
+        # After shock (persists until end)
+        assert np.all(alpha[5:] == 10.0)
+
+    def test_generate_observations_shape_and_bounds(self):
+        """Test that output shape is correct and values are within [0,1]."""
+        n_nodes = 3
+        n_steps = 20
+
+        obs = generate_observations(n_nodes, n_steps, seed=42)
+
         assert obs.shape == (n_steps, n_nodes)
+        assert np.min(obs) >= 0.0
+        assert np.max(obs) <= 1.0
 
-    def test_output_shape_scenario_2(self):
-        """Test: Output shape for Scenario 2."""
-        n_nodes, n_steps = 3, 50
-        obs = generate_observations(
-            n_nodes=n_nodes, n_steps=n_steps, scenario=2, shock_pattern="phase"
-        )
-        assert obs.shape == (n_steps, n_nodes)
+    def test_generate_observations_reproducibility(self):
+        """Test that fixing the seed produces identical results."""
+        obs1 = generate_observations(2, 10, seed=123)
+        obs2 = generate_observations(2, 10, seed=123)
+        assert np.array_equal(obs1, obs2)
 
-    def test_value_bounds(self):
-        """Test: Values bounded between [0, 1] (clipping)."""
-        obs = generate_observations(n_nodes=2, n_steps=50, dispersion=2.0)
-        assert np.all(obs >= 0.0)
-        assert np.all(obs <= 1.0)
-
-    def test_reproducibility(self):
-        """Test: Random seed must guarantee identical results."""
-        kwargs = {"n_nodes": 4, "n_steps": 20, "scenario": 2, "shock_pattern": "trend"}
-        obs1 = generate_observations(**kwargs)
-        obs2 = generate_observations(**kwargs)
-        np.testing.assert_array_equal(obs1, obs2)
-
-    def test_trend_logic_execution(self):
-        """Test: The complex 'trend' loop executes without error."""
-        obs = generate_observations(
-            n_nodes=1,
-            n_steps=30,
-            scenario=2,
-            shock_pattern="trend",
-            trend_shape="linear",
-        )
-        assert obs.shape == (30, 1)
-
-    def test_custom_timings(self):
-        """Test: Usage of custom shock timings."""
-        obs = generate_observations(
-            n_nodes=1,
-            n_steps=100,
-            scenario=2,
-            shock_pattern="phase",
-            shock_time=20,
-            recovery_time=80,
-        )
-        assert obs.shape == (100, 1)
-
-    def test_error_invalid_scenario(self):
-        """Test: Error on invalid scenario ID."""
+    def test_generate_observations_validation(self):
+        """Test error raising for invalid inputs."""
         with pytest.raises(ValueError, match="Scenario must be 1 or 2"):
-            generate_observations(n_nodes=1, n_steps=10, scenario=3)
+            generate_observations(1, 10, scenario=99)
 
-    def test_error_invalid_pattern(self):
-        """Test: Error on invalid shock pattern."""
         with pytest.raises(ValueError, match="Invalid shock_pattern"):
-            generate_observations(
-                n_nodes=1, n_steps=10, scenario=2, shock_pattern="unknown"
-            )
-
-    @pytest.mark.parametrize("pattern", ["phase", "sudden", "trend"])
-    def test_generate_scenario_patterns(self, pattern):
-        """Test: Generating all valid shock patterns for Scenario 2."""
-        n_steps = 100
-        s_time = 30
-        r_time = 70
-
-        result = generate_observations(
-            scenario=2,
-            n_nodes=1,
-            n_steps=n_steps,
-            shock_pattern=pattern,
-            shock_time=s_time,
-            recovery_time=r_time,
-        )
-
-        assert len(result) == n_steps
+            generate_observations(1, 10, scenario=2, shock_pattern="invalid_pattern")
 
 
-class TestGenerateCandidates:
-    """Unit tests for candidate generation (generate_candidates)."""
+class TestDataExtraction:
+    """Tests for environment data extraction functions."""
 
-    def test_random_structure(self):
-        """Test: Default structure (list of tuples)."""
-        n_c, n_p = 5, 3
-        candidates = generate_candidates(n_candidates=n_c, n_preferences=n_p)
+    def test_get_voter_trajectory_data(self):
+        """Verify data retrieval for a specific voter."""
+        # Mock Environment and Voter
+        env = MagicMock()
+        voter = MagicMock()
+        voter.id = 1
+        voter.trajectory = [{"expected_mean": [0.5], "precision": [1.0]}]
+        voter.preferences = {"mean": [0.9], "precision": [2.0]}
 
-        assert len(candidates) == n_c
-        assert isinstance(candidates[0], tuple)
-        assert len(candidates[0]) == 2
-        assert candidates[0][0].shape == (n_p,)
-        assert candidates[0][1].shape == (n_p,)
+        env.voters = [voter]
+        # Mock input_data (shape: n_steps, n_preferences)
+        env.input_data = np.zeros((10, 5))
 
-    def test_validity_values(self):
-        """Test: Finite values and positive precisions."""
-        candidates = generate_candidates(n_candidates=5, n_preferences=2)
-        for means, precs in candidates:
-            assert np.all(precs >= 0)
-            assert np.all(np.isfinite(means))
+        data = get_voter_trajectory_data(env, voter_id=1, pref_idx=0)
 
-    def test_manual_injection(self):
-        """Test: Manual data injection (Must be exact)."""
-        n_c, n_p = 2, 2
-        in_means = np.array([[1.0, 2.0], [3.0, 4.0]])
-        in_precs = np.array([[0.1, 0.2], [0.3, 0.4]])
-        candidates = generate_candidates(
-            n_c, n_p, manual_means=in_means, manual_precisions=in_precs
-        )
-        np.testing.assert_array_equal(candidates[0][0], in_means[0])
-        np.testing.assert_array_equal(candidates[1][1], in_precs[1])
+        assert "expected_mean" in data
+        assert "observations" in data
+        assert data["title_suffix"] == "for Voter 1"
+        assert data["preference_params"] == (0.9, 2.0)
 
-    def test_error_shape_mismatch(self):
-        """Test: Errors if manual inputs have the wrong shape."""
-        n_c, n_p = 2, 2
-        bad_shape = np.zeros((5, 5))
-        good_shape = np.zeros((2, 2))
+    def test_extract_env_data_vectorized(self):
+        """Test extraction of complex nested structures into JAX arrays."""
+        # --- Setup Mock Environment ---
+        env = MagicMock()
 
-        with pytest.raises(ValueError, match="means must have shape"):
-            generate_candidates(
-                n_c, n_p, manual_means=bad_shape, manual_precisions=good_shape
-            )
-        with pytest.raises(ValueError, match="precisions must have shape"):
-            generate_candidates(
-                n_c, n_p, manual_means=good_shape, manual_precisions=bad_shape
-            )
+        # 1. Preferences Indices (e.g., 2 dimensions)
+        env.preferences_idx = [0, 1]
 
-    def test_fallback_logic(self):
-        """Test: If only one manual array is provided, fallback to random."""
-        candidates = generate_candidates(
-            2, 2, manual_means=np.zeros((2, 2)), manual_precisions=None
-        )
-        assert not np.array_equal(candidates[0][0], np.zeros(2))
+        # 2. Candidates (2 candidates)
+        c1 = MagicMock()
+        c1.policy = {"mean": np.array([0.1, 0.2]), "precision": np.array([1, 1])}
+        c2 = MagicMock()
+        c2.policy = {"mean": np.array([0.8, 0.9]), "precision": np.array([1, 1])}
+        env.candidates = [c1, c2]
+
+        node_0 = {
+            "expected_mean": jnp.array([0.5, 0.5]),
+            "expected_precision": jnp.array([1.0, 1.0]),
+        }
+        node_1 = {
+            "expected_mean": jnp.array([0.6, 0.6]),
+            "expected_precision": jnp.array([1.0, 1.0]),
+        }
+
+        agent_prefs = {
+            "preferences": {
+                "mean": jnp.array([[0.0, 0.0], [1.0, 1.0]]),
+                "precision": jnp.array([[1.0, 1.0], [1.0, 1.0]]),
+            }
+        }
+
+        def get_item(index):
+            if index == 0:
+                return node_0
+            if index == 1:
+                return node_1
+            if index == -1:
+                return agent_prefs
+            raise IndexError("Unexpected index access")
+
+        env.last_attributes.__getitem__.side_effect = get_item
+
+        data = _extract_env_data_vectorized(env)
+
+        assert data["candidates"]["mean"].shape == (2, 2)
+        assert data["candidates"]["mean"][1, 0] == 0.8
+
+        assert data["beliefs"]["mean"].shape == (2, 2)
+
+        assert data["preferences"]["mean"].shape == (2, 2)

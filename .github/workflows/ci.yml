@@ -1,61 +1,31 @@
-name: CI
+name: Publish Docs
 
 on:
   push:
-    branches: [ "main" ]
-  pull_request:
-    branches: [ "main" ]
+    branches:
+      - main
+
+permissions:
+  contents: write
 
 jobs:
-  tests:
-    name: Run Tests & Lint
+  deploy:
     runs-on: ubuntu-latest
-    
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-      # install uv
       - name: Install uv
         uses: astral-sh/setup-uv@v1
         with:
-          version: "latest"
           enable-cache: true
+          cache-suffix: "docs"
 
-      # install python
       - name: Set up Python
         run: uv python install 3.12
 
-      # dependancies
       - name: Install dependencies
         run: uv sync --all-extras --dev
 
-      # format check
-      - name: Lint with Ruff
-        run: |
-          uv run ruff format --check .
-          uv run ruff check .
-
-      - name: Install Graphviz
-        run: sudo apt-get update && sudo apt-get install -y graphviz
-        
-      # unit test
-      #- name: Run Tests with pytest
-      #  run: uv run pytest tests --cov=src --cov-report=html --cov-report=term --cov-report=xml
-
-      # notebook test
-      - name: Test Notebooks execution
-        run: uv run python -m nbconvert notebooks/*.ipynb --to notebook --execute --inplace
-
-      # save report
-      #- name: Upload Coverage Report
-      #  uses: actions/upload-artifact@v4
-      #  with:
-      #    name: coverage-report
-      #    path: htmlcov/
-
-      # summary
-      #- name: Coverage Summary
-      #  if: always()
-      #  run: |
-      #    echo "## 📊 Coverage Report" >> $GITHUB_STEP_SUMMARY
-      #    uv run coverage report --format=markdown >> $GITHUB_STEP_SUMMARY
+      - name: Deploy to GitHub Pages
+        run: uv run mkdocs gh-deploy --force

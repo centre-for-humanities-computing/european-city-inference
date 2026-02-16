@@ -214,10 +214,6 @@ def _extract_env_data_vectorized(env):
     """
     Extract and vectorize belief, preference, and policy data from the environment.
 
-    This function transforms the environment's agent and candidate data into
-    dense JAX arrays, organized as matrices where rows typically represent
-    agents and columns represent preference dimensions.
-
     Parameters
     ----------
     env :
