@@ -6,6 +6,7 @@ import jax.numpy as jnp
 from eci.voting_system.quadratic import (
     _compute_sequential_qv_allocation,
     _vote_quadratic,
+    strategic_quadratic_vote,
 )
 
 
@@ -73,7 +74,6 @@ class TestQuadraticVoting:
             "softmax_probs_round_1": poll_probs,
             "total_votes_per_candidate": jnp.array([100, 20]),
         }
-
         final_return = {"final_winner": 10}
 
         mock_qv_func.side_effect = [poll_return, final_return]
@@ -81,9 +81,18 @@ class TestQuadraticVoting:
         base_prefs = jnp.array([[1.0, 1.0], [1.0, 1.0]])
         mock_compute.return_value = (base_prefs, None, None)
 
+        env = MagicMock()
+        key = jax.random.PRNGKey(0)
+        strategic_quadratic_vote(env, key)
+
+        assert mock_qv_func.call_count == 2, (
+            f"Expected 2 calls, got {mock_qv_func.call_count}"
+        )
+
         args_2, kwargs_2 = mock_qv_func.call_args_list[1]
 
         assert "custom_preferences" in kwargs_2
 
         expected_adjusted = jnp.array([[0.8, 0.2], [0.8, 0.2]])
+
         assert jnp.allclose(kwargs_2["custom_preferences"], expected_adjusted)
