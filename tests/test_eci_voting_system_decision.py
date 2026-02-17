@@ -1,63 +1,83 @@
 import jax
 import jax.numpy as jnp
+import pytest
 
-from eci.voting_system.decisions import _compute_option_preferences, _sample_choice
-
-
-class MockCandidate:
-    """A mock class representing a candidate in the voting system."""
-
-    def __init__(self, mean, precision):
-        self.policy = {"mean": jnp.array(mean), "precision": jnp.array(precision)}
+from eci.voting_system.decisions import _compute_preferences, _sample_choice
 
 
-class MockEnv:
-    """A mock environment class."""
+@pytest.fixture
+def mock_decision_data():
+    """Prepare a dictionary of mock data for preference tests."""
+    n_agents = 3
+    n_candidates = 2
+    n_dim = 2
 
-    def __init__(self, candidates):
-        self.candidates = candidates
+    return {
+        "beliefs": {
+            "mean": jnp.zeros((n_agents, n_dim)),
+            "precision": jnp.ones((n_agents, n_dim)),
+        },
+        "preferences": {
+            "mean": jnp.zeros((n_agents, n_dim)),
+            "precision": jnp.ones((n_agents, n_dim)),
+        },
+        "candidates": {
+            "mean": jnp.zeros((n_candidates, n_dim)),
+            "precision": jnp.ones((n_candidates, n_dim)),
+        },
+    }
 
 
-def test_sample_choice():
-    """Verifies that the function correctly takes agent preference scores."""
-    key = jax.random.PRNGKey(0)
-    # 2 agents, 3 options
-    # agent 0 prefers option 0; agent 1 prefers option 2
-    preferences = jnp.array([[100.0, 0.0, 0.0], [0.0, 0.0, 100.0]])
+def test_sample_choice_shapes():
+    """Verifies that the output shapes of _sample_choice are correct."""
+    key = jax.random.PRNGKey(42)
+    # Preferences for 5 agents and 3 candidates
+    preferences = jnp.array(
+        [
+            [1.0, 2.0, 0.5],
+            [0.1, 0.8, 0.1],
+            [10.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0],
+            [-1.0, -2.0, 0.0],
+        ]
+    )
 
     vote, softmax_probs = _sample_choice(key, preferences)
 
-    assert vote.shape == (2,)
+    assert vote.shape == (5,)
+    assert softmax_probs.shape == (5, 3)
+    assert jnp.allclose(jnp.sum(softmax_probs, axis=1), 1.0)
+
+
+def test_sample_choice_determinism():
+    """Verifies that a very high score consistently results in the same choice."""
+    key = jax.random.PRNGKey(0)
+    preferences = jnp.array([[100.0, 0.0, 0.0]])
+
+    vote, softmax_probs = _sample_choice(key, preferences)
+
     assert vote[0] == 0
-    assert vote[1] == 2
-
-    assert softmax_probs.shape == (2, 3)
-    assert jnp.allclose(softmax_probs[0], jnp.array([1.0, 0.0, 0.0]), atol=1e-5)
+    assert softmax_probs[0, 0] > 0.99
 
 
-def test_compute_option_preferences():
-    """Verifies that the function calculates the final preference."""
-    # 2 Candidates
-    c0 = MockCandidate([1.0], [10.0])
-    c1 = MockCandidate([2.0], [10.0])
-    env = MockEnv([c0, c1])
+def test_compute_preferences_logic(mock_decision_data):
+    """Verifies that the score calculation (Belief Gap - Candidate Gap) is correct."""
+    data = mock_decision_data
 
-    # 2 Agents
-    beliefs_mean = jnp.array([[1.0], [2.0]])
-    beliefs_precision = jnp.array([[10.0], [10.0]])
-    pref_belief_gap = jnp.array([0.5, 0.8])
+    pref_scores, cand_gap, belief_gap = _compute_preferences(data)
 
-    # Score = pref_belief_gap - KL(belief || policy)
-    scores = _compute_option_preferences(
-        env, beliefs_mean, beliefs_precision, pref_belief_gap
-    )
+    assert pref_scores.shape == (3, 2)
+    assert cand_gap.shape == (3, 2)
+    assert belief_gap.shape == (3,)
 
-    assert scores.shape == (2, 2)  # (agents, candidates)
+    expected_score = belief_gap[0] - cand_gap[0, 0]
+    assert jnp.isclose(pref_scores[0, 0], expected_score)
 
-    # Check Agent 0
-    assert jnp.allclose(scores[0, 0], 0.5)  # Expected score for C0 (KL=0)
-    assert scores[0, 1] < 0.5  # Expected score for C1 (KL>0)
 
-    # Check Agent 1
-    assert scores[1, 0] < 0.8  # Expected score for C0 (KL>0)
-    assert jnp.allclose(scores[1, 1], 0.8)  # Expected score for C1 (KL=0)
+def test_compute_preferences_broadcast(mock_decision_data):
+    """Verifies that the subtraction broadcasts correctly across all candidates."""
+    pref_scores, cand_gap, belief_gap = _compute_preferences(mock_decision_data)
+
+    for i in range(pref_scores.shape[0]):
+        for j in range(pref_scores.shape[1]):
+            assert jnp.isclose(pref_scores[i, j], belief_gap[i] - cand_gap[i, j])

@@ -125,9 +125,7 @@ def strategic_vote(env, key, *args, **kwargs) -> dict:
     """
     # Simulate a classic vote to predict expected winners
     expected_results = _vote_plurality(env, key, *args, **kwargs)
-    expected_winners = expected_results["first_round_winners"]  # Top 2 candidates
-    expected_final_winner = expected_results["final_winner"]  # Predicted winner
-
+    expected_results = jnp.mean(expected_results["softmax_probs_round_1"], axis=0)
     # Extract agent preferences
     agent_data = _extract_env_data_vectorized(env)
     candidate_preferences, pref_candidate_gap, pref_belief_gap = _compute_preferences(
@@ -135,10 +133,7 @@ def strategic_vote(env, key, *args, **kwargs) -> dict:
     )
 
     # Weight preferences toward the expected winner
-    strategic_factor = 2.0  # Boost preference for the predicted winner
-    adjusted_preferences = candidate_preferences * (
-        1 + (candidate_preferences == expected_final_winner) * (strategic_factor - 1)
-    )
+    adjusted_preferences = candidate_preferences * expected_results
 
     # Update agent data with adjusted preferences
     kwargs["custom_preferences"] = adjusted_preferences
@@ -151,7 +146,6 @@ def strategic_vote(env, key, *args, **kwargs) -> dict:
 
     return {
         **strategic_results,
-        "expected_winners": expected_winners,
-        "expected_final_winner": expected_final_winner,
+        "expected_results": expected_results,
         "strategy_used": "weighted_by_expected_results",
     }

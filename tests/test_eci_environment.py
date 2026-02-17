@@ -2,236 +2,173 @@ from unittest.mock import MagicMock, patch
 
 import jax
 import jax.numpy as jnp
-import pandas as pd
 import pytest
 
-from src.eci.environment import Environment
+from eci.agents import Candidate, Voter
+from eci.environment import EnvConfig, Environment
 
 
-@pytest.fixture
-def mock_dependencies():
-    """Patches external dependencies to isolate Environment logic."""
-    with (
-        patch("src.eci.environment.Network") as mock_net,
-        patch("src.eci.environment.generate_observations") as mock_gen,
-        patch("src.eci.environment.Voter") as mock_voter_cls,
-        patch("src.eci.environment.Candidate") as mock_cand_cls,
-        patch("src.eci.environment.vmap") as mock_vmap,
+class TestEnvironment:
+    """Tests for the Environment class, mocking external dependencies like PyHGF."""
+
+    @pytest.fixture
+    def mock_config(self):
+        """Configure for testing."""
+        return EnvConfig(
+            num_voters=5,
+            num_candidates=2,
+            num_preferences=3,
+            num_steps=10,
+            scenario=2,
+            seed=42,
+            tonic_volatility_mean=-2.0,
+            tonic_volatility_std=0.01,
+        )
+
+    @patch("eci.environment.generate_observations")
+    @patch("eci.environment.Network")
+    def test_initialization(self, mock_network_cls, mock_gen_obs, mock_config):
+        """Test that __init__ correctly."""
+        # Setup Mocks
+        # mock inputs: shape (n_steps, n_preferences) -> (10, 3)
+        mock_gen_obs.return_value = jnp.zeros((10, 3))
+
+        # Initialize Environment
+        env = Environment(mock_config)
+
+        # --- Assertions ---
+
+        # 1. Data Generation
+        mock_gen_obs.assert_called_once_with(n_nodes=3, n_steps=10, scenario=2)
+        assert env.input_data.shape == (10, 3)
+
+        # 2. Network Setup
+        mock_network_cls.assert_called()
+        # Verify nodes were added (1 call for state nodes + 3 calls for children = 4)
+        assert env.network.add_nodes.call_count >= 4
+
+        # 3. Agent Initialization
+        assert len(env.voters) == 5
+        assert len(env.candidates) == 2
+        assert len(env.agents) == 7  # 5 + 2
+
+        # Check types
+        assert isinstance(env.voters[0], Voter)
+        assert isinstance(env.candidates[0], Candidate)
+
+        # Check IDs are unique and sequential
+        ids = [a.id for a in env.agents]
+        assert ids == list(range(7))
+
+    @patch("eci.environment.generate_observations")
+    @patch("eci.environment.Network")
+    def test_gather_agent_data(self, mock_net, mock_gen, mock_config):
+        """Test that agent parameters are correctly gathered into JAX arrays."""
+        mock_gen.return_value = jnp.zeros((10, 3))
+        env = Environment(mock_config)
+
+        mus, pis, vols = env._gather_agent_data()
+
+        # Means: (n_voters, n_preferences)
+        assert mus.shape == (5, 3)
+        # Precisions: (n_voters, n_preferences)
+        assert pis.shape == (5, 3)
+        # Volatilities: (n_voters,)
+        assert vols.shape == (5,)
+
+    @patch("eci.environment.generate_observations")
+    @patch("eci.environment.Network")
+    def test_run_n_simulation_flow(self, mock_net, mock_gen, mock_config):
+        """Test the simulation loop execution."""
+        env = Environment(mock_config)
+
+        # Mock a simulation function
+        # Signature: func(env, key, *args)
+        mock_sim_func = MagicMock()
+        mock_sim_func.return_value = {"winner": 1}
+
+        key = jax.random.PRNGKey(0)
+        n_sims = 3
+
+        results = env.run_n_simulation(mock_sim_func, key, n_simulations=n_sims)
+
+        # Verify results storage
+        assert len(results) == 3
+        assert results[0] == {"winner": 1}
+        assert results[2] == {"winner": 1}
+
+        # Verify call count
+        assert mock_sim_func.call_count == 3
+
+        # Verify env.sim_result is updated
+        assert env.sim_result == results
+
+    def test_run_single_agent_inference_logic(self, mock_config):
+        """Test the logic inside the single agent inference step."""
+        with (
+            patch("eci.environment.generate_observations") as mock_gen,
+            patch("eci.environment.Network"),
+        ):
+            mock_gen.return_value = jnp.zeros((5, 2))
+            env = Environment(mock_config)
+
+            mock_net_instance = MagicMock()
+
+            mock_attributes_list = MagicMock()
+            mock_net_instance.attributes = mock_attributes_list
+
+            mock_net_instance.input_idxs = [0, 1]
+
+            mock_net_instance.last_attributes = "mock_last_attrs"
+            mock_net_instance.node_trajectories = "mock_node_trajs"
+
+            mu = jnp.array([0.5, 0.5])
+            pi = jnp.array([1.0, 1.0])
+            vol = 0.1
+
+            last, traj = env._run_single_agent_inference(mu, pi, vol, mock_net_instance)
+
+            mock_attributes_list.__getitem__.assert_any_call(-1)
+
+            mock_attributes_list.__getitem__.assert_any_call(0)
+            mock_attributes_list.__getitem__.assert_any_call(1)
+
+            mock_net_instance.input_data.assert_called_with(input_data=env.input_data)
+
+            assert last == "mock_last_attrs"
+            assert traj == "mock_node_trajs"
+
+    @patch("eci.environment.vmap")
+    @patch("eci.environment.generate_observations")
+    @patch("eci.environment.Network")
+    def test_run_multi_agent_inference_distribution(
+        self, mock_net_cls, mock_gen, mock_vmap, mock_config
     ):
-        # Setup basic mock returns
-        mock_gen.return_value = jnp.zeros((10, 2))  # Dummy observations
+        """Test that results are correctlydistributed."""
+        mock_gen.return_value = jnp.zeros((10, 3))
+        mock_net_instance = MagicMock()
+        mock_net_instance.input_idxs = [0, 1, 2]
+        mock_net_cls.return_value = mock_net_instance
 
-        def dummy_vmapped_func(*args, **kwargs):
-            # Return shape matching (last_attributes, node_trajectories)
-            return ({"attr": "dummy"}, [{"traj": "dummy"}])
+        env = Environment(mock_config)
 
-        mock_vmap.return_value = dummy_vmapped_func
-
-        yield {
-            "Network": mock_net,
-            "generate_observations": mock_gen,
-            "Voter": mock_voter_cls,
-            "Candidate": mock_cand_cls,
-            "vmap": mock_vmap,
+        dummy_traj = {
+            "mean": jnp.array(
+                [10, 11, 12, 13, 14]
+            ),  # Voter 0 gets 10, Voter 1 gets 11...
+            "precision": jnp.array([20, 21, 22, 23, 24]),
         }
 
+        mock_vmap.return_value.return_value = ("dummy_last_attrs", dummy_traj)
 
-@pytest.fixture
-def env(mock_dependencies):
-    """Create an Environment instance with mocked dependencies."""
-    return Environment(num_voters=5, num_candidates=3, num_preferences=2)
+        env._run_multi_agent_inference()
 
+        assert env.preferences_idx == [0, 1, 2]
 
-# --- Initialization Tests ---
+        v0 = env.voters[0]
+        assert v0.trajectory["mean"] == 10
+        assert v0.trajectory["precision"] == 20
 
-
-def test_environment_initialization(mock_dependencies):
-    """Test that __init__ sets up the environment correctly."""
-    num_voters = 5
-    num_candidates = 3
-    num_preferences = 2
-
-    env = Environment(num_voters, num_candidates, num_preferences)
-
-    # Verify Network creation
-    mock_dependencies["Network"].assert_called()
-    assert env.network == mock_dependencies["Network"].return_value
-
-    # Verify Agent Creation
-    assert len(env.voters) == num_voters
-    assert len(env.candidates) == num_candidates
-    assert len(env.agents) == num_voters + num_candidates
-
-    # Verify generate_observations called
-    mock_dependencies["generate_observations"].assert_called_with(
-        n_nodes=num_preferences, n_steps=100, scenario=1
-    )
-
-
-def test_gather_agent_data(env):
-    """Test aggregation of voter attributes into arrays."""
-    # Setup mock voters with specific data
-    v1 = MagicMock()
-    v1.preferences = {"mean": jnp.array([1.0]), "precision": jnp.array([2.0])}
-    v1.tonic_volatility = 0.5
-
-    v2 = MagicMock()
-    v2.preferences = {"mean": jnp.array([0.0]), "precision": jnp.array([1.0])}
-    v2.tonic_volatility = -0.5
-
-    env.voters = [v1, v2]
-
-    mus, pis, vols = env._gather_agent_data()
-
-    assert mus.shape == (2, 1)  # 2 voters, 1 preference
-    assert pis.shape == (2, 1)
-    assert vols.shape == (2,)
-    assert mus[0] == 1.0
-
-
-def test_initialize_network(env, mock_dependencies):
-    """Test that initialize_network calls vmap and sets up trajectories."""
-    # Setup mock gather data
-    env._gather_agent_data = MagicMock(
-        return_value=(jnp.zeros((5, 2)), jnp.zeros((5, 2)), jnp.zeros(5))
-    )
-
-    # Mock network internals required for preferences_idx logic
-    edge_mock = MagicMock()
-    edge_mock.value_parents = [0]
-    env.network.edges = {0: edge_mock}
-    env.network.input_idxs = [0]
-
-    env.initialize_network()
-
-    # Verify vmap was called
-    mock_dependencies["vmap"].assert_called()
-
-    # Verify attributes were stored
-    assert env.last_attributes is not None
-    assert env.node_trajectories is not None
-
-
-# --- Simulation Execution Tests ---
-
-
-def test_run_n_simulation(env):
-    """Test running multiple simulations and aggregating results."""
-
-    # Mock a simulation function
-    def mock_sim_func(e, k):
-        return {
-            "vote_round_1": jnp.zeros(len(e.voters)),
-            "val": float(jax.random.randint(k, (), 0, 10)),  # unique per run
-        }
-
-    key = jax.random.PRNGKey(0)
-    n_sims = 3
-
-    results = env.run_n_simulation(mock_sim_func, key, n_sims)
-
-    assert len(results) == n_sims
-    assert 0 in results
-    assert 1 in results
-    assert 2 in results
-    assert env.sim_result == results
-
-
-def test_update_agents(env):
-    """Test that simulation results are correctly appended to agents' history."""
-    # 1. Setup Environment with 2 voters
-    v1 = MagicMock(
-        vote_round_1=[],
-        vote_round_2=[],
-        softmax_probs_1=[],
-        softmax_probs_2=[],
-        dissatisfactions=[],
-    )
-    v2 = MagicMock(
-        vote_round_1=[],
-        vote_round_2=[],
-        softmax_probs_1=[],
-        softmax_probs_2=[],
-        dissatisfactions=[],
-    )
-    env.voters = [v1, v2]
-
-    # 2. Mock Simulation Result (1 simulation run)
-    # The keys must match what _update_agents expects
-    env.sim_result = {
-        0: {
-            "vote_round_1": [10, 20],
-            "vote_final_round_2": [11, 21],
-            "softmax_probs_round_1": [[0.1], [0.2]],
-            "softmax_probs_final_round_2": [[0.3], [0.4]],
-            "dissatisfaction": [5.0, 6.0],
-        }
-    }
-
-    # 3. Run Update
-    env._update_agents()
-
-    # 4. Verify V1 (Index 0)
-    assert v1.vote_round_1 == [10]
-    assert v1.vote_round_2 == [11]
-    assert v1.dissatisfactions == [5.0]
-
-    # 5. Verify V2 (Index 1)
-    assert v2.vote_round_1 == [20]
-    assert v2.vote_round_2 == [21]
-
-
-# --- Analysis & Output Tests ---
-
-
-def test_get_winners_simple(env):
-    """Test winner determination logic."""
-    # Votes: A, A, B, B, B (B wins)
-    votes = ["A", "A", "B", "B", "B"]
-
-    winners = env.get_winners(votes, top_n=1)
-    assert winners == ["B"]
-
-    winners_top2 = env.get_winners(votes, top_n=2)
-    assert winners_top2 == ["B", "A"]
-
-
-def test_get_winners_jax_array(env):
-    """Test winner determination with JAX/Numpy arrays."""
-    # Votes: 1, 1, 2 (1 wins)
-    votes = [jnp.array(1), jnp.array(1), jnp.array(2)]
-
-    winners = env.get_winners(votes, top_n=1)
-    assert winners == [1]
-
-
-def test_create_data_frame(env):
-    """Test pandas DataFrame creation from agent history."""
-    # Setup manually
-    env.num_simulations = 2
-
-    # Voter 1 History
-    v1 = MagicMock()
-    v1.vote_round_1 = [1, 2]  # Sim 0, Sim 1
-    v1.vote_round_2 = [1, 1]
-
-    # Voter 2 History
-    v2 = MagicMock()
-    v2.vote_round_1 = [1, 2]
-    v2.vote_round_2 = [1, 2]
-
-    env.voters = [v1, v2]
-
-    df = env.create_data_frame()
-
-    assert isinstance(df, pd.DataFrame)
-    assert len(df) == 2  # 2 simulations
-    assert "simulation_id" in df.columns
-    assert "winners_round_1" in df.columns
-    assert "winner_round_2" in df.columns
-
-    # Check Simulation 0 logic
-    # R1 Votes: [1, 1] -> Winner 1
-    # R2 Votes: [1, 1] -> Winner 1
-    row_0 = df.iloc[0]
-    assert row_0["winner_round_2"] == 1
+        v4 = env.voters[4]
+        assert v4.trajectory["mean"] == 14
+        assert v4.trajectory["precision"] == 24

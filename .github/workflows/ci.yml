@@ -29,6 +29,9 @@ jobs:
       - name: Install dependencies
         run: uv sync --all-extras --dev
 
+      - name: Deploy to GitHub Pages
+        run: uv run mkdocs gh-deploy --force
+
       # format check
       - name: Lint with Ruff
         run: |
@@ -39,23 +42,23 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y graphviz
         
       # unit test
-      #- name: Run Tests with pytest
-      #  run: uv run pytest tests --cov=src --cov-report=html --cov-report=term --cov-report=xml
+      - name: Run Tests with pytest
+        run: uv run pytest tests --cov=src --cov-report=html --cov-report=term --cov-report=xml
 
       # notebook test
       - name: Test Notebooks execution
         run: uv run python -m nbconvert notebooks/*.ipynb --to notebook --execute --inplace
 
       # save report
-      #- name: Upload Coverage Report
-      #  uses: actions/upload-artifact@v4
-      #  with:
-      #    name: coverage-report
-      #    path: htmlcov/
+      - name: Upload Coverage Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: htmlcov/
 
       # summary
-      #- name: Coverage Summary
-      #  if: always()
-      #  run: |
-      #    echo "## 📊 Coverage Report" >> $GITHUB_STEP_SUMMARY
-      #    uv run coverage report --format=markdown >> $GITHUB_STEP_SUMMARY
+      - name: Coverage Summary
+        if: always()
+        run: |
+          echo "## 📊 Coverage Report" >> $GITHUB_STEP_SUMMARY
+          uv run coverage report --format=markdown >> $GITHUB_STEP_SUMMARY

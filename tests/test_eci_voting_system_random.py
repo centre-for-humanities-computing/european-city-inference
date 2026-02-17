@@ -1,44 +1,70 @@
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import jax
 import jax.numpy as jnp
 
-from eci.voting_system.random_voting import _vote_random
+from eci.voting_system.random_voting import _find_top_two_winners, _vote_random
 
 
-def test_vote_random():
-    """Tests the `_vote_random` function."""
-    # Setup
-    c0 = MagicMock()
-    c0.id = 100
-    c1 = MagicMock()
-    c1.id = 101
-    c2 = MagicMock()
-    c2.id = 102
+class TestRandomVoting:
+    """Class testing random voting."""
 
-    env = MagicMock()
-    env.candidates = [c0, c1, c2]
-    env.voters = [0, 1, 2]  # 3 voters
+    def test_find_top_two_winners(self):
+        """Test finding top 2 winners from a vote array."""
+        votes = jnp.array([0, 0, 1, 2, 0])
+        num_candidates = 3
+        winners = _find_top_two_winners(votes, num_candidates)
+        assert len(winners) == 2
+        assert winners[0] == 0
+        assert winners[1] in [1, 2]
 
-    key = jax.random.PRNGKey(42)
+    @patch("eci.voting_system.random_voting._sample_choice")
+    def test_vote_random_flow(self, mock_sample):
+        """Test the full flow of _vote_random."""
+        env = MagicMock()
+        env.voters = [MagicMock()] * 5  # 5 Voters
+        env.candidates = [MagicMock()] * 3  # 3 Candidates
 
-    results = _vote_random(env, key)
+        r1_votes = jnp.array([0, 1, 0, 1, 0])
+        r1_probs = jnp.zeros((5, 3))
 
-    assert "vote_round_1" in results
-    assert "first_round_winners" in results
-    assert "vote_final_round_2" in results
-    assert "final_winner" in results
+        r2_votes = jnp.array([0, 0, 0, 0, 0])
+        r2_probs = jnp.zeros((5, 3))
 
-    vote_r1 = results["vote_round_1"]
-    assert vote_r1.shape == (3,)
-    # Vote values should be IDs
-    assert jnp.all(jnp.isin(vote_r1, jnp.array([100, 101, 102])))
+        mock_sample.side_effect = [
+            (r1_votes, r1_probs),  # Call 1
+            (r2_votes, r2_probs),  # Call 2
+        ]
 
-    winners_r1 = results["first_round_winners"]
-    assert winners_r1.shape == (2,)
-    assert jnp.all(jnp.isin(winners_r1, jnp.array([100, 101, 102])))
+        key = jax.random.PRNGKey(42)
+        results = _vote_random(env, key)
 
-    final_winner = results["final_winner"]
-    # Should be an ID
-    assert final_winner.shape == ()
-    assert final_winner in [100, 101, 102]
+        expected_keys = [
+            "vote_round_1",
+            "softmax_probs_round_1",
+            "first_round_winners",
+            "vote_final_round_2",
+            "softmax_probs_final_round_2",
+            "final_winner",
+            "pref_candidate_gap",
+            "candidate_preferences",
+            "pref_belief_gap",
+        ]
+        for k in expected_keys:
+            assert k in results, f"Missing key: {k}"
+
+        winners = results["first_round_winners"]
+        assert 0 in winners
+        assert 1 in winners
+        assert results["final_winner"] == 0
+
+        assert results["candidate_preferences"].shape == (5, 3)
+        assert mock_sample.call_count == 2
+
+        args_round_2, _ = mock_sample.call_args_list[1]
+        prefs_passed_round_2 = args_round_2[1]
+
+        assert jnp.all(prefs_passed_round_2[:, 2] == -jnp.inf)
+
+        assert not jnp.all(prefs_passed_round_2[:, 0] == -jnp.inf)
+        assert not jnp.all(prefs_passed_round_2[:, 1] == -jnp.inf)

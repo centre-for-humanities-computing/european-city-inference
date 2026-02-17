@@ -132,52 +132,30 @@ def _compute_sequential_qv_allocation(
 
 
 def strategic_quadratic_vote(env, key, budget: float = 99.0, *args, **kwargs) -> dict:
-    """Perform quadratic strategic voting.
+    """Perform quadratic strategic voting."""
+    # 1. Get full results from the "poll"
+    poll_results = _vote_quadratic(env, key, budget, *args, **kwargs)
 
-    Parameters
-    ----------
-    env:
-        The environment object.
-    key:
-        A JAX PRNG key (rng) used for seeding random operations.
-    budget:
-        Token for quadratic voting.
-    args:
-        Variable length argument list.
-    kwargs:
-        Arbitrary keyword arguments.
+    # 2. Extract what you need
+    # The popularity/weighting factor (Array)
+    expected_popularity = jnp.mean(poll_results["softmax_probs_round_1"], axis=0)
 
-    Returns
-    -------
-        vote data.
-    """
-    # Simulate classic QV to predict expected winners
-    expected_results = _vote_quadratic(env, key, budget, *args, **kwargs)
-    expected_winner = expected_results["final_winner"]
-    total_votes_per_candidate = expected_results["total_votes_per_candidate"]
-
-    # Extract agent preferences
+    # 3. Compute Preferences
     agent_data = _extract_env_data_vectorized(env)
     candidate_preferences, pref_candidate_gap, pref_belief_gap = _compute_preferences(
         agent_data
     )
 
-    # Weight preferences toward expected winner or top candidates
-    strategic_factor = 2.0  # Boost factor for strategic candidates
-    adjusted_preferences = candidate_preferences * (
-        1 + (candidate_preferences == expected_winner) * (strategic_factor - 1)
-    )
+    # 4. Apply Weighting
+    adjusted_preferences = candidate_preferences * expected_popularity
     kwargs["custom_preferences"] = adjusted_preferences
-    # Re-run QV with adjusted preferences
-    new_key = jax.random.PRNGKey(
-        jax.random.randint(key, (), 0, 1000000)
-    )  # Fresh random key
+
+    # 5. Re-run QV
+    new_key = jax.random.PRNGKey(jax.random.randint(key, (), 0, 1000000))
     strategic_results = _vote_quadratic(env, new_key, budget, *args, **kwargs)
 
-    # Return strategic results + expected outcomes
     return {
         **strategic_results,
-        "expected_winner": expected_winner,
-        "expected_total_votes": total_votes_per_candidate,
+        "expected_results": expected_popularity,  # Return the array
         "strategy_used": "weighted_by_expected_results",
     }
