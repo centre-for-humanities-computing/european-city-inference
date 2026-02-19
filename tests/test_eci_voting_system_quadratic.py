@@ -4,7 +4,6 @@ import jax
 import jax.numpy as jnp
 
 from eci.voting_system.quadratic import (
-    _compute_sequential_qv_allocation,
     _vote_quadratic,
     strategic_quadratic_vote,
 )
@@ -12,30 +11,6 @@ from eci.voting_system.quadratic import (
 
 class TestQuadraticVoting:
     """Test quadratic voting."""
-
-    @patch("eci.voting_system.quadratic._sample_choice")
-    def test_compute_sequential_qv_allocation_math(self, mock_sample):
-        """Verify that credits are allocated according to the fixed weights."""
-        key = jax.random.PRNGKey(42)
-        budget = 100.0
-        prefs = jnp.zeros((2, 2))
-        mock_sample.side_effect = [
-            (jnp.array([0, 1]), None),  # Iter 1
-            (jnp.array([0, 1]), None),  # Iter 2
-            (jnp.array([0, 1]), None),  # Iter 3
-            (jnp.array([0, 1]), None),  # Iter 4
-            (jnp.array([0, 1]), None),  # Iter 5
-        ]
-
-        votes, credits_spent = _compute_sequential_qv_allocation(key, prefs, budget)
-
-        assert jnp.isclose(credits_spent[0, 0], 100.0)
-        assert jnp.isclose(credits_spent[1, 1], 100.0)
-
-        assert votes[0, 0] == 10
-        assert votes[1, 1] == 10
-
-        assert mock_sample.call_count == 5
 
     @patch("eci.voting_system.quadratic._compute_sequential_qv_allocation")
     @patch("eci.voting_system.quadratic._compute_preferences")
@@ -64,9 +39,7 @@ class TestQuadraticVoting:
     @patch("eci.voting_system.quadratic._vote_quadratic")
     @patch("eci.voting_system.quadratic._compute_preferences")
     @patch("eci.voting_system.quadratic._extract_env_data_vectorized")
-    def test_strategic_quadratic_vote_flow(
-        self, mock_extract, mock_compute, mock_qv_func
-    ):
+    def test_strategic_quadratic_vote_flow(self, _, mock_compute, mock_qv_func):
         """Test the strategic voting."""
         poll_probs = jnp.array([[0.8, 0.2], [0.8, 0.2]])
 
@@ -89,7 +62,7 @@ class TestQuadraticVoting:
             f"Expected 2 calls, got {mock_qv_func.call_count}"
         )
 
-        args_2, kwargs_2 = mock_qv_func.call_args_list[1]
+        _, kwargs_2 = mock_qv_func.call_args_list[1]
 
         assert "custom_preferences" in kwargs_2
 

@@ -61,7 +61,7 @@ def _get_pref_candidate_gap(data: dict) -> jnp.ndarray:
 
     # Compute KL(Preferences || Policy)
     gap_per_dim = kl_divergence(
-        pref_mean[:, None, :],
+        pref_mean[:, None, :],  # broadcasting (n_agents, n_candidates, n_dim)
         pref_precision[:, None, :],
         cand_mean[None, :, :],
         cand_precision[None, :, :],

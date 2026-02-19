@@ -90,29 +90,24 @@ def _get_parameter_trajectory(
     beta_t = np.full(n_steps, b1, dtype=float)
 
     if pattern in [None, "phase"]:
-        # Shock occurs, then immediately reverts after recovery time
         alpha_t[s_time:r_time] = a2
         beta_t[s_time:r_time] = b2
 
     elif pattern == "sudden":
-        # Shock occurs and persists indefinitely
         alpha_t[s_time:] = a2
         beta_t[s_time:] = b2
 
     elif pattern == "trend":
         t = np.arange(n_steps)
-        # Masks for different phases
         mask_degrade = (t >= s_time) & (t < r_time)
         mask_recover = t >= r_time
 
-        # Degradation Phase
         if np.any(mask_degrade):
             prog = (t[mask_degrade] - s_time) / (r_time - s_time)
             w = prog if trend_shape == "linear" else prog**2
             alpha_t[mask_degrade] = a1 * (1 - w) + a2 * w
             beta_t[mask_degrade] = b1 * (1 - w) + b2 * w
 
-        # Recovery Phase
         if np.any(mask_recover):
             prog = (t[mask_recover] - r_time) / (n_steps - r_time)
             w = (1 - prog) if trend_shape == "linear" else (1 - prog) ** 2
@@ -178,7 +173,7 @@ def generate_observations(
     s_time = np.clip(s_time, 0, n_steps)
     r_time = np.clip(r_time, s_time, n_steps)
 
-    # Scenario 1 is just Scenario 2 with no shock pattern (effectively)
+    # Scenario 1 is just Scenario 2 with no shock pattern
     pattern = shock_pattern if scenario == 2 else None
 
     alpha_t, beta_t = _get_parameter_trajectory(
