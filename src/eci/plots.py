@@ -1,5 +1,6 @@
 from typing import Any, ContextManager, Optional, Tuple
 
+import matplotlib.patches as mpatches
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -46,7 +47,6 @@ def plot_preference(
     dims_to_plot = [0, 1] if n_dims >= 2 else list(range(n_dims))
 
     # Calculate the x-range
-
     v_sig, c_sig = 1.0 / np.sqrt(v_pr), 1.0 / np.sqrt(c_pr)
     lows = np.concatenate([(v_mu - 4 * v_sig).ravel(), (c_mu - 4 * c_sig).ravel()])
     highs = np.concatenate([(v_mu + 4 * v_sig).ravel(), (c_mu + 4 * c_sig).ravel()])
@@ -89,7 +89,14 @@ def plot_preference(
             f"Dimension {dim_idx}", loc="center", fontsize=10, fontweight="normal"
         )
         ax.set_yticks([])
-
+        # Ajouter une légende personnalisée
+        voter_patch = mpatches.Patch(color="black", alpha=0.3, label="Voters")
+        candidates_patch = mpatches.Patch(
+            color=sns.color_palette("viridis", n_colors=10)[5],
+            alpha=0.5,
+            label="Candidates",
+        )
+        ax.legend(handles=[voter_patch] + [candidates_patch], loc="upper left")
     # Set the x-axis label for the last plot
     axes[-1].set_xlabel("Preference")
     return fig, axes
@@ -115,7 +122,6 @@ def plot_vote_shares(
     ax : plt.Axes
         The axes object.
     """
-    # Use context manager if available, otherwise standard plotting
     try:
         ctx = _get_context()
     except NameError:
@@ -144,8 +150,6 @@ def plot_vote_shares(
         ax.set_title("Proportion of Votes per Candidate and Round")
         ax.set_ylabel("Vote Share")
         ax.grid(axis="y", linestyle="--", alpha=0.5)
-
-        # Adjust legend location if needed
         ax.legend(loc="upper right", bbox_to_anchor=(1, 1))
 
         return fig, ax
@@ -278,12 +282,13 @@ def plot_voting_metrics(combined_df: pd.DataFrame):
         palette="viridis",
         alpha=0.6,
         jitter=0.25,
-        legend=False,
+        legend="auto",
         ax=ax[0],
     )
     ax[0].set_title("How well do votes reflect preferences?", fontsize=14, pad=15)
     ax[0].set_ylabel("Total Weighted Utility")
     ax[0].set_xlabel("")
+
     # winner_satisfaction
     sns.stripplot(
         data=plot_df,
@@ -293,7 +298,7 @@ def plot_voting_metrics(combined_df: pd.DataFrame):
         palette="viridis",
         alpha=0.6,
         jitter=0.25,
-        legend=False,
+        legend="auto",
         ax=ax[1],
     )
     ax[1].set_title("Does the winner satisfy the group?", fontsize=14, pad=15)

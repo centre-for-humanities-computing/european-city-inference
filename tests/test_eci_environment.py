@@ -36,18 +36,16 @@ class TestEnvironment:
         # Initialize Environment
         env = Environment(mock_config)
 
-        # --- Assertions ---
-
-        # 1. Data Generation
+        # Data Generation
         mock_gen_obs.assert_called_once_with(n_nodes=3, n_steps=10, scenario=2)
         assert env.input_data.shape == (10, 3)
 
-        # 2. Network Setup
+        # Network Setup
         mock_network_cls.assert_called()
         # Verify nodes were added (1 call for state nodes + 3 calls for children = 4)
         assert env.network.add_nodes.call_count >= 4
 
-        # 3. Agent Initialization
+        # Agent Initialization
         assert len(env.voters) == 5
         assert len(env.candidates) == 2
         assert len(env.agents) == 7  # 5 + 2

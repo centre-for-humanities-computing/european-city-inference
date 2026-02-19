@@ -6,7 +6,6 @@ import numpy as np
 import pandas as pd
 import pytest
 
-# Use a non-interactive backend to prevent windows from opening during tests
 matplotlib.use("Agg")
 
 from eci.plots import (
@@ -23,7 +22,6 @@ class TestPlots:
     @pytest.fixture
     def mock_env_data(self):
         """Create mock data simulating the environment extraction."""
-        # 2 Agents, 2 Dimensions
         return {
             "preferences": {
                 "mean": np.array([[0.5, 0.5], [0.1, 0.1]]),
@@ -63,14 +61,14 @@ class TestPlots:
             }
         )
 
-        # 1. Test without existing axes (creates new figure)
+        # Test without existing axes (creates new figure)
         fig, ax = plot_vote_shares(df)
         assert isinstance(fig, plt.Figure)
         assert ax.get_ylabel() == "Vote Share"
 
-        # 2. Test with existing axes (reuses it)
-        fig2, ax2 = plt.subplots()
-        fig_res, ax_res = plot_vote_shares(df, ax=ax2)
+        # Test with existing axes (reuses it)
+        _, ax2 = plt.subplots()
+        _, ax_res = plot_vote_shares(df, ax=ax2)
         assert ax_res is ax2  # Must be the same object
 
     def test_plot_belief_trajectory(self):
