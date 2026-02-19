@@ -544,11 +544,13 @@ dev = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "coverage" },
     { name = "mkdocs-git-revision-date-localized-plugin" },
     { name = "mkdocs-jupyter" },
     { name = "mkdocs-material" },
     { name = "mkdocs-minify-plugin" },
     { name = "mkdocstrings", extra = ["python"] },
+    { name = "pytest" },
 ]
 
 [package.metadata]
@@ -584,11 +586,13 @@ provides-extras = ["dev"]
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "coverage", specifier = ">=7.10.7" },
     { name = "mkdocs-git-revision-date-localized-plugin", specifier = ">=1.5.1" },
     { name = "mkdocs-jupyter", specifier = ">=0.25.1" },
     { name = "mkdocs-material", specifier = ">=9.7.1" },
     { name = "mkdocs-minify-plugin", specifier = ">=0.8.0" },
     { name = "mkdocstrings", extras = ["python"], specifier = ">=1.0.2" },
+    { name = "pytest", specifier = ">=8.4.2" },
 ]
 
 [[package]]

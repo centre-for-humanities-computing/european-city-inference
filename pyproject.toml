@@ -68,9 +68,11 @@ addopts = "--cov=eci --cov-report=term --cov-report=html"
 
 [dependency-groups]
 dev = [
+    "coverage>=7.10.7",
     "mkdocs-git-revision-date-localized-plugin>=1.5.1",
     "mkdocs-jupyter>=0.25.1",
     "mkdocs-material>=9.7.1",
     "mkdocs-minify-plugin>=0.8.0",
     "mkdocstrings[python]>=1.0.2",
+    "pytest>=8.4.2",
 ]
