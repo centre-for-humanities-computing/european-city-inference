@@ -28,11 +28,11 @@ def mock_voting_data():
 
 
 def test_get_pref_belief_gap_identical(mock_voting_data):
-    """If beliefs and preferences are identical, KL divergence sum should be 0."""
+    """Test that KL divergence is zero when beliefs and preferences are identical."""
     gaps = _get_pref_belief_gap(mock_voting_data)
 
-    assert gaps.shape == (2,)
-    assert jnp.allclose(gaps, 0.0)
+    assert gaps.shape == (2,)  # One gap per agent
+    assert jnp.allclose(gaps, 0.0)  # KL divergence should be 0
 
 
 def test_get_pref_belief_gap_value_check():
@@ -48,7 +48,9 @@ def test_get_pref_belief_gap_value_check():
         },
     }
     gaps = _get_pref_belief_gap(data)
-    assert jnp.isclose(gaps[0], 1.0)
+    assert jnp.isclose(
+        gaps[0], 1.0
+    )  # KL divergence should be 0.5 per dimension, summed to 1.0
 
 
 def test_get_pref_candidate_gap_broadcasting(mock_voting_data):
@@ -59,7 +61,7 @@ def test_get_pref_candidate_gap_broadcasting(mock_voting_data):
 
 
 def test_get_pref_candidate_gap_values():
-    """Verify the broadcasting math for a specific agent-candidate pair."""
+    """Verify the broadcasting."""
     data = {
         "preferences": {
             "mean": jnp.array([[0.0]]),
@@ -71,5 +73,5 @@ def test_get_pref_candidate_gap_values():
         },
     }
     gaps = _get_pref_candidate_gap(data)
-
+    # KL(Preferences || Candidate 1) = 0.5, KL(Preferences || Candidate 2) = 2.0
     assert jnp.allclose(gaps, jnp.array([[0.5, 2.0]]))
