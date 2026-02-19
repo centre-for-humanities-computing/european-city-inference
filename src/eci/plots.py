@@ -9,7 +9,6 @@ from scipy.stats import norm
 
 from eci.utils import _extract_env_data_vectorized
 
-# Global Style Configuration
 STYLE = "whitegrid"
 
 

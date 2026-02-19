@@ -64,9 +64,7 @@ class TestQuadraticVoting:
     @patch("eci.voting_system.quadratic._vote_quadratic")
     @patch("eci.voting_system.quadratic._compute_preferences")
     @patch("eci.voting_system.quadratic._extract_env_data_vectorized")
-    def test_strategic_quadratic_vote_flow(
-        self, mock_extract, mock_compute, mock_qv_func
-    ):
+    def test_strategic_quadratic_vote_flow(self, _, mock_compute, mock_qv_func):
         """Test the strategic voting."""
         poll_probs = jnp.array([[0.8, 0.2], [0.8, 0.2]])
 
@@ -89,7 +87,7 @@ class TestQuadraticVoting:
             f"Expected 2 calls, got {mock_qv_func.call_count}"
         )
 
-        args_2, kwargs_2 = mock_qv_func.call_args_list[1]
+        _, kwargs_2 = mock_qv_func.call_args_list[1]
 
         assert "custom_preferences" in kwargs_2
 

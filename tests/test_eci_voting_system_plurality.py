@@ -3,7 +3,6 @@ from unittest.mock import MagicMock, patch
 import jax
 import jax.numpy as jnp
 
-# Import the functions to test
 from eci.voting_system.plurality import (
     _find_top_two_winners,
     _vote_plurality,
@@ -30,7 +29,7 @@ class TestPluralityVoting:
         assert winners[1] in [
             1,
             2,
-        ]  # JAX top_k is deterministic but implementation dependent
+        ]
 
     @patch("eci.voting_system.plurality._sample_choice")
     @patch("eci.voting_system.plurality._compute_preferences")
@@ -73,9 +72,7 @@ class TestPluralityVoting:
     @patch("eci.voting_system.plurality._vote_plurality")
     @patch("eci.voting_system.plurality._compute_preferences")
     @patch("eci.voting_system.plurality._extract_env_data_vectorized")
-    def test_strategic_vote_weighting(
-        self, mock_extract, mock_compute, mock_plurality_func
-    ):
+    def test_strategic_vote_weighting(self, _, mock_compute, mock_plurality_func):
         """Verifies that Strategic Vote."""
         poll_probs = jnp.array([[0.9, 0.1], [0.9, 0.1]])
 

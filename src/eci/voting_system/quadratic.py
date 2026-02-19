@@ -32,11 +32,9 @@ def _vote_quadratic(env, key, budget: float = 99.0, *args, **kwargs) -> dict:
     # Evaluate candidate scores for each agent
     if "custom_preferences" in kwargs:
         candidate_preferences = kwargs["custom_preferences"]
-        agent_data = _extract_env_data_vectorized(env)
         _, pref_candidate_gap, pref_belief_gap = _compute_preferences(agent_data)
     else:
         # Extract all agent beliefs and preferences
-        agent_data = _extract_env_data_vectorized(env)
         candidate_preferences, pref_candidate_gap, pref_belief_gap = (
             _compute_preferences(agent_data)
         )
@@ -90,44 +88,35 @@ def _vote_quadratic(env, key, budget: float = 99.0, *args, **kwargs) -> dict:
 def _compute_sequential_qv_allocation(
     key: jax.random.PRNGKey, candidate_preferences: ArrayLike, budget: float
 ) -> tuple[ArrayLike, ArrayLike]:
-    """Compute token allocaiton.
-
-    Parameters
-    ----------
-    key:
-        A JAX PRNG key (rng) used for seeding random operations.
-    candidate_preferences:
-        Preference for each candidate.
-    budget:
-        Token to allocate.
-
-    Returns
-    -------
-        vote allocation and credit spent.
-    """
     num_agents, num_candidates = candidate_preferences.shape
 
-    # Weights strategy
-    weights = jnp.array([0.50, 0.25, 0.15, 0.07, 0.03])
-    weights = (weights / jnp.sum(weights)) * budget
+    # Normalize preferences to get weights for each vote
+    pref_sums = jnp.sum(candidate_preferences, axis=1, keepdims=True)
+    normalized_prefs = candidate_preferences / (
+        pref_sums + 1e-9
+    )  # Avoid division by zero
+
+    # Use normalized preferences to determine the number of votes
+    num_votes = 5  # Fixed number of votes
+    vote_weights = normalized_prefs * (
+        budget / num_votes
+    )  # Distribute budget across votes
+
     credits_spent = jnp.zeros((num_agents, num_candidates))
     current_prefs = candidate_preferences
-    keys = jax.random.split(key, 5)
+    keys = jax.random.split(key, num_votes)
 
-    # Sequentially allocate votes based on preferences
-    for i in range(5):
+    for i in range(num_votes):
         # Sample choice based on current preferences
         choice_indices, _ = _sample_choice(keys[i], current_prefs)
         # Create one-hot encoding for chosen candidates
         choice_one_hot = jax.nn.one_hot(choice_indices, num_candidates)
-        # Distribute credits spent based on weights
-        credits_spent = credits_spent + (choice_one_hot * weights[i])
-        # Remove chosen candidate from current preferences
-        current_prefs = current_prefs - (choice_one_hot * 1e9)
+        # Distribute credits spent based on vote weights
+        credits_spent += choice_one_hot * vote_weights
+        # Remove chosen candidate from current preferences to avoid re-selection
+        current_prefs -= choice_one_hot * 1e9
 
-    # Convert credits spent to integer votes using quadratic cost
     votes_matrix = jnp.floor(jnp.sqrt(credits_spent)).astype(jnp.int32)
-
     return votes_matrix, credits_spent
 
 
@@ -148,11 +137,12 @@ def strategic_quadratic_vote(env, key, budget: float = 99.0, *args, **kwargs) ->
 
     # 4. Apply Weighting
     adjusted_preferences = candidate_preferences * expected_popularity
-    kwargs["custom_preferences"] = adjusted_preferences
 
     # 5. Re-run QV
-    new_key = jax.random.PRNGKey(jax.random.randint(key, (), 0, 1000000))
-    strategic_results = _vote_quadratic(env, new_key, budget, *args, **kwargs)
+    new_key = jax.random.split(key)[0]
+    strategic_results = _vote_quadratic(
+        env, new_key, budget, *args, **kwargs, custom_preferences=adjusted_preferences
+    )
 
     return {
         **strategic_results,
