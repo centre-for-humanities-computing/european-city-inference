@@ -151,10 +151,9 @@ class Environment:
         self.candidates = self._instantiate_candidates(
             c_means, c_precs, start_id=len(self.voters)
         )
-        self.all_agents: list[Agent] = []
         # combine all agents into a single list for easy access
-        self.all_agents.extend(self.candidates)
-        self.all_agents.extend(self.voters)
+        self.agents.extend(self.candidates)
+        self.agents.extend(self.voters)
 
     def _generate_voter_data(self, key: jax.Array):
         """Generate raw JAX arrays for voter parameters."""
