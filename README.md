@@ -7,14 +7,13 @@
 
 **Agent-Based Political Election Simulator using Predictive Coding.**
 
-ECI is a Agent-Based simulation designed to model collective decision-making in volatile political environments. Built on top of **JAX** and **PyHGF** (Hierarchical Gaussian Filter), it simulates how thousands of voters update their beliefs and cast votes under different voting systems (Plurality, Quadratic Voting).
+## What does this do?
+ECI is an **agent-based simulation** built on **JAX** and **PyHGF** (Hierarchical Gaussian Filter) designed to model voting behavior under different voting systems. 
 
-## Key Features
+# Why should I care?
+It allows for the transformation of verbal hypotheses into formal hypotheses about decision-making in voting behavior, simulates votes under different voting systems (Plurality, Quadratic Voting), and compares the outputs. 
 
-* **Cognitive Agents:** Voters employ **Bayesian belief updating** as implemented in **hierarchical predictive coding networks**, together with an **uncertainty-informed decision-making process** to select the most relevant candidate for them.
-* **Multi-Voting Systems:** Compare outcomes between **Plurality Voting** and **Quadratic Voting**.
-
-## Installation
+## How do I install it?
 
 This project uses `uv` for Python package management.
 
@@ -28,9 +27,9 @@ make install
 
 ```
 
-## Quick Start
+## How do I use it? 
 
-Here is a minimal example to run a simulation with 200 voters and 6 candidates:
+Here is an example to run a simulation with 200 voters and 6 candidates:
 
 ```python
 import jax
