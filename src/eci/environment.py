@@ -152,8 +152,8 @@ class Environment:
             c_means, c_precs, start_id=len(self.voters)
         )
         # combine all agents into a single list for easy access
-        self.agents.extend(self.candidates)
         self.agents.extend(self.voters)
+        self.agents.extend(self.candidates)
 
     def _generate_voter_data(self, key: jax.Array):
         """Generate raw JAX arrays for voter parameters."""
