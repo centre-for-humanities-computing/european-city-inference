@@ -37,11 +37,11 @@ def kl_divergence(
     mean_pref = jnp.asarray(mean_pref)
     precision_pref = jnp.asarray(precision_pref)
 
-    # compute variances
+    # compute variances for KL divergence
     var_belief = 1.0 / precision_belief
     var_pref = 1.0 / precision_pref
 
-    # KL divergence formula
+    # kl divergence formula for univariate Gaussians
     kl = (
         jnp.log(jnp.sqrt(var_pref) / jnp.sqrt(var_belief))
         + (var_belief + (mean_belief - mean_pref) ** 2) / (2 * var_pref)
@@ -59,7 +59,7 @@ def _get_parameter_trajectory(
     phase_params: PhaseParams,
 ) -> Tuple[np.ndarray, np.ndarray]:
     """
-    Calculate the alpha and beta parameters based on the shock pattern.
+    Calculate the alpha and beta parameters for generate observations.
 
     Parameters
     ----------
@@ -89,25 +89,25 @@ def _get_parameter_trajectory(
     alpha_t = np.full(n_steps, a1, dtype=float)
     beta_t = np.full(n_steps, b1, dtype=float)
 
+    # Apply shock pattern to parameters over time
     if pattern in [None, "phase"]:
         alpha_t[s_time:r_time] = a2
         beta_t[s_time:r_time] = b2
-
     elif pattern == "sudden":
         alpha_t[s_time:] = a2
         beta_t[s_time:] = b2
-
     elif pattern == "trend":
         t = np.arange(n_steps)
         mask_degrade = (t >= s_time) & (t < r_time)
         mask_recover = t >= r_time
 
+        # Degradation phase
         if np.any(mask_degrade):
             prog = (t[mask_degrade] - s_time) / (r_time - s_time)
             w = prog if trend_shape == "linear" else prog**2
             alpha_t[mask_degrade] = a1 * (1 - w) + a2 * w
             beta_t[mask_degrade] = b1 * (1 - w) + b2 * w
-
+        # Recovery phase
         if np.any(mask_recover):
             prog = (t[mask_recover] - r_time) / (n_steps - r_time)
             w = (1 - prog) if trend_shape == "linear" else (1 - prog) ** 2
@@ -191,8 +191,27 @@ def generate_observations(
 
 
 def get_voter_trajectory_data(env, voter_id: int, pref_idx: int = 0):
-    """Retrieve specific arrays for a single voter's belief trajectory."""
+    """
+    Retrieve specific arrays for a single voter's belief trajectory.
+
+    Parameters
+    ----------
+    env :
+        The simulation environment containing agents and candidates.
+    voter_id :
+        The ID of the voter to retrieve data for.
+    pref_idx :
+        The index of the preference dimension to extract.
+
+    Returns
+    -------
+    A dictionary containing the expected mean, precision, observations, and
+    preference parameters for the specified voter and preference index.
+    """
+    # Find the voter in the environment
     voter = next(v for v in env.voters if v.id == voter_id)
+
+    # Extract the relevant data from the voter's trajectory and preferences
     return {
         "expected_mean": voter.trajectory[0]["expected_mean"],
         "precisions": voter.trajectory[0]["precision"],

@@ -85,6 +85,7 @@ class Environment:
         config : EnvConfig
             Configuration object containing all simulation parameters.
         """
+        # Store configuration and initialize random key
         self.config = config
         self.key = jax.random.PRNGKey(config.seed)
 
@@ -101,6 +102,7 @@ class Environment:
 
         # Initialization
         self._init_agents()
+        # TODO: Allow custom network
         self.network = self._setup_network()
 
         # Input data generation
@@ -137,16 +139,25 @@ class Environment:
         return network
 
     def _init_agents(self) -> None:
-        """
-        Create voters and candidates using vectorized operations.
+        """Create voters and candidates."""
+        self.key, voter_key, candidate_key = jax.random.split(self.key, 3)
 
-        Generates random parameters for all agents in a single JAX call
-        to improve initialization speed compared to iterative loops.
-        """
-        # Vectorized generation of random parameters
-        self.key, k1, k2, k3, k4, k5, k6 = jax.random.split(self.key, 7)
+        # generate preference data for voters and candidates
+        v_means, v_precs, v_vols = self._generate_voter_data(voter_key)
+        c_means, c_precs = self._generate_candidate_data(candidate_key)
 
-        # Voter parameters
+        # instanciate voter and candidate objects
+        self.voters = self._instantiate_voters(v_means, v_precs, v_vols, start_id=0)
+        self.candidates = self._instantiate_candidates(
+            c_means, c_precs, start_id=len(self.voters)
+        )
+        # combine all agents into a single list for easy access
+        self.agents.extend(self.voters)
+        self.agents.extend(self.candidates)
+
+    def _generate_voter_data(self, key: jax.Array):
+        """Generate raw JAX arrays for voter parameters."""
+        k1, k2, k3 = jax.random.split(key, 3)
         v_means = jax.random.uniform(
             k1,
             shape=(self.config.num_voters, self.config.num_preferences),
@@ -164,45 +175,53 @@ class Environment:
             * self.config.tonic_volatility_std
         ) + self.config.tonic_volatility_mean
 
-        # Candidate parameters
+        return v_means, v_precs, v_vols
+
+    def _generate_candidate_data(self, key: jax.Array):
+        """Generate raw JAX arrays for candidate parameters."""
+        k1, k2 = jax.random.split(key, 2)
         c_means = jax.random.uniform(
-            k4,
+            k1,
             shape=(self.config.num_candidates, self.config.num_preferences),
             minval=0.0,
             maxval=2.0,
         )
         c_precs = jax.random.uniform(
-            k5,
+            k2,
             shape=(self.config.num_candidates, self.config.num_preferences),
             minval=0.3,
             maxval=1.0,
         )
+        return c_means, c_precs
 
-        # Instantiate Python objects
-        next_id = 0
-
-        # Create Voters
+    def _instantiate_voters(
+        self, v_means, v_precs, v_vols, start_id: int
+    ) -> list[Voter]:
+        """Create Voter objects from raw data arrays."""
+        voters = []
         for i in range(self.config.num_voters):
-            voter = Voter(
-                id=next_id,
-                preferences={"mean": v_means[i], "precision": v_precs[i]},
-                tonic_volatility=float(v_vols[i]),
+            voters.append(
+                Voter(
+                    id=start_id + i,
+                    preferences={"mean": v_means[i], "precision": v_precs[i]},
+                    tonic_volatility=float(v_vols[i]),
+                )
             )
-            self.voters.append(voter)
-            next_id += 1
+        return voters
 
-        # Create Candidates
+    def _instantiate_candidates(
+        self, c_means, c_precs, start_id: int
+    ) -> list[Candidate]:
+        """Create Candidate objects from raw data arrays."""
+        candidates = []
         for i in range(self.config.num_candidates):
-            candidate = Candidate(
-                id=next_id,
-                policy={"mean": c_means[i], "precision": c_precs[i]},
+            candidates.append(
+                Candidate(
+                    id=start_id + i,
+                    policy={"mean": c_means[i], "precision": c_precs[i]},
+                )
             )
-            self.candidates.append(candidate)
-            next_id += 1
-
-        self.agents = []
-        self.agents.extend(self.voters)
-        self.agents.extend(self.candidates)
+        return candidates
 
     def _gather_agent_data(self) -> Tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
         """
@@ -248,6 +267,8 @@ class Environment:
         all_results = {}
 
         current_key = key
+
+        # TODO: Consider parallel execution for large n_simulations using vmap or pmap
         for i in tqdm.tqdm(range(n_simulations), desc="Running Simulations"):
             current_key, subkey = jax.random.split(current_key)
             all_results[i] = func(self, subkey, *args, **kwargs)
@@ -258,8 +279,6 @@ class Environment:
     def _run_single_agent_inference(self, mu, pi, tonic_volatility, network):
         """
         Prepare network and run inference for a single agent.
-
-        Helper function designed to be used with `vmap`.
 
         Parameters
         ----------
@@ -277,21 +296,19 @@ class Environment:
         Tuple
             Last attributes and node trajectories.
         """
+        # Set preferences and tonic volatility in the network attributes
         network.attributes[-1]["preferences"] = {"mean": mu, "precision": pi}
         preferences_idx = network.input_idxs
         for idx in preferences_idx:
             network.attributes[idx]["tonic_volatility"] = tonic_volatility
 
+        # Give observations to the network
         network.input_data(input_data=self.input_data)
 
         return network.last_attributes, network.node_trajectories
 
     def _run_multi_agent_inference(self) -> None:
-        """
-        Execute inference for all agents in parallel using vmap.
-
-        Updates the `trajectory` attribute of each Voter object.
-        """
+        """Execute inference for all agents in parallel using vmap."""
         all_mus, all_pis, all_volatilities = self._gather_agent_data()
 
         # Partial application to fix the network argument
