@@ -37,10 +37,10 @@ def kl_divergence(
     mean_pref = jnp.asarray(mean_pref)
     precision_pref = jnp.asarray(precision_pref)
 
-    # kl divergence formula for univariate Gaussians
+    # Correct KL divergence formula using precisions
     kl = 0.5 * (
-        jnp.log(precision_pref / precision_belief)
-        + (precision_belief / precision_pref)
+        jnp.log(precision_belief / precision_pref)
+        + (precision_pref / precision_belief)
         + (precision_pref * (mean_belief - mean_pref) ** 2)
         - 1.0
     )
