@@ -28,10 +28,10 @@ def _get_pref_belief_gap(data: dict) -> jnp.ndarray:
 
     # Compute KL(Preferences || Beliefs)
     gap_per_preference = kl_divergence(
-        pref_mean,
-        pref_precision,
         beliefs_mean,
         beliefs_precision,
+        pref_mean,
+        pref_precision,
     )
 
     # Sum over the preference axis.
@@ -61,10 +61,10 @@ def _get_pref_candidate_gap(data: dict) -> jnp.ndarray:
 
     # Compute KL(Preferences || Policy)
     gap_per_dim = kl_divergence(
-        pref_mean[:, None, :],  # broadcasting (n_agents, n_candidates, n_dim)
-        pref_precision[:, None, :],
         cand_mean[None, :, :],
         cand_precision[None, :, :],
+        pref_mean[:, None, :],  # broadcasting (n_agents, n_candidates, n_dim)
+        pref_precision[:, None, :],
     )
     # Sum across the dimensions.
     return jnp.sum(gap_per_dim, axis=-1)

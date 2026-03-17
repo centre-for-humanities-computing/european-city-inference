@@ -9,10 +9,10 @@ PhaseParams = Tuple[Params, Params]
 
 
 def kl_divergence(
-    mean_pref: ArrayLike,
-    precision_pref: ArrayLike,
     mean_belief: ArrayLike,
     precision_belief: ArrayLike,
+    mean_pref: ArrayLike,
+    precision_pref: ArrayLike,
 ) -> ArrayLike:
     """Calculate the KL divergence between two Gaussian distributions.
 
@@ -37,15 +37,12 @@ def kl_divergence(
     mean_pref = jnp.asarray(mean_pref)
     precision_pref = jnp.asarray(precision_pref)
 
-    # compute variances for KL divergence
-    var_belief = 1.0 / precision_belief
-    var_pref = 1.0 / precision_pref
-
     # kl divergence formula for univariate Gaussians
-    kl = (
-        jnp.log(jnp.sqrt(var_pref) / jnp.sqrt(var_belief))
-        + (var_belief + (mean_belief - mean_pref) ** 2) / (2 * var_pref)
-        - 0.5
+    kl = 0.5 * (
+        jnp.log(precision_pref / precision_belief)
+        + (precision_belief / precision_pref)
+        + (precision_pref * (mean_belief - mean_pref) ** 2)
+        - 1.0
     )
     return kl
 
