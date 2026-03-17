@@ -63,3 +63,36 @@ def _compute_preferences(
 
     # Stack the candidate scores
     return preference_score_per_agent, pref_candidate_gap, pref_belief_gap
+
+
+def response_function(data):
+    """Compute the response for the agent.
+
+    Parameters
+    ----------
+    data:
+        The dictionary returned by _extract_env_data_vectorized containing
+    preference_means:
+        the mean preference of agents for each preference.
+    preference_precisions:
+        the precision preference of agents for each preference.
+    pref_belief_gap:
+        The gap between preference of agent and belief of agent for each preferences.
+    """
+    # get the kl divergence between belief and preference, and candidate and preference
+    candidate_preferences, pref_candidate_gap, pref_belief_gap = _compute_preferences(
+        data
+    )
+
+    # KL(BELIEF || PREF) - KL(POLICY || PREF)
+    # preference_score_per_agent = pref_belief_gap[:, jnp.newaxis] - pref_candidate_gap
+
+    # KL(POLICY || PREF) / KL(BELIEF || PREF)
+    # preference_score_per_agent = pref_candidate_gap - pref_belief_gap[:, jnp.newaxis]
+
+    # (KL(POLICY || PREF) - KL(BELIEF || PREF)) / KL(BELIEF || PREF)
+    preference_score_per_agent = (
+        pref_candidate_gap - pref_belief_gap[:, jnp.newaxis]
+    ) / pref_belief_gap[:, jnp.newaxis]
+
+    return preference_score_per_agent
