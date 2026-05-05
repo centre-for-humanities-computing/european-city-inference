@@ -1,4 +1,3 @@
-from abc import ABC
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
@@ -6,7 +5,7 @@ import numpy as np
 
 
 @dataclass
-class Agent(ABC):
+class Agent:
     """An abstract class for all agents in the simulation.
 
     This class provides the basic structure for any agent.
@@ -60,7 +59,6 @@ class Voter(Agent):
     # Initialization
     preferences: Dict[str, Any]
     tonic_volatility: float
-    budget: float = 100.0
 
     # Attribute for Theory of Mind
     perceived_outcome: Optional[np.ndarray] = None
@@ -86,11 +84,10 @@ class Candidate(Agent):
     id :
         The agent's unique identifier.
     policy :
-        The candidate's policy platform, typically including 'mean' and
+        The candidate's policy including 'mean' and
         'precision' vectors.
     vote_count :
-        A simple counter for votes. Note: The official tally is managed
-        by the `VotingSystem`.
+        Counter for votes.
     """
 
     policy: Dict[str, Any]

@@ -5,7 +5,7 @@ from eci.utils import (
 )
 
 
-def _get_pref_belief_gap(data: dict) -> jnp.ndarray:
+def _get_belief_preference_gap(data: dict) -> jnp.ndarray:
     """Compute the KL divergence between agent beliefs and preferences.
 
     Parameters
@@ -15,7 +15,7 @@ def _get_pref_belief_gap(data: dict) -> jnp.ndarray:
 
     Returns
     -------
-    pref_belief_gap : jnp.ndarray
+    belief_preference_gap : jnp.ndarray
         The computed KL divergence summed per agent.
     """
     # Extract belief parameters
@@ -26,7 +26,7 @@ def _get_pref_belief_gap(data: dict) -> jnp.ndarray:
     pref_mean = data["preferences"]["mean"]
     pref_precision = data["preferences"]["precision"]
 
-    # Compute KL(Preferences || Beliefs)
+    # Compute KL(Beliefs || Preferences)
     gap_per_preference = kl_divergence(
         beliefs_mean,
         beliefs_precision,
@@ -34,7 +34,6 @@ def _get_pref_belief_gap(data: dict) -> jnp.ndarray:
         pref_precision,
     )
 
-    # Sum over the preference axis.
     return jnp.sum(gap_per_preference, axis=-1)
 
 
@@ -44,7 +43,7 @@ def _get_pref_candidate_gap(data: dict) -> jnp.ndarray:
     Parameters
     ----------
     data : dict
-        agent beliefs (mean,precision) and candidate policies (mean,precision).
+        agent preferences (mean,precision) and candidate policies (mean,precision).
 
     Returns
     -------
@@ -59,12 +58,12 @@ def _get_pref_candidate_gap(data: dict) -> jnp.ndarray:
     cand_mean = data["candidates"]["mean"]
     cand_precision = data["candidates"]["precision"]
 
-    # Compute KL(Preferences || Policy)
+    # Compute KL(Policy || Preferences)
     gap_per_dim = kl_divergence(
         cand_mean[None, :, :],
         cand_precision[None, :, :],
-        pref_mean[:, None, :],  # broadcasting (n_agents, n_candidates, n_dim)
+        pref_mean[:, None, :],
         pref_precision[:, None, :],
     )
-    # Sum across the dimensions.
+
     return jnp.sum(gap_per_dim, axis=-1)

@@ -1,8 +1,7 @@
 import jax
 import jax.numpy as jnp
-from jax.typing import ArrayLike
 
-from eci.utils import _extract_env_data_vectorized
+from eci.utils import _extract_env_data_vectorized, _find_top_k_winners, _find_winner
 from eci.voting_system.decisions import (
     _compute_preferences,
     _sample_choice,
@@ -31,26 +30,20 @@ def _vote_plurality(env, key, *args, **kwargs) -> dict:
     agent_data = _extract_env_data_vectorized(env)
 
     # Evaluate candidate scores for each agent
+    candidate_preferences, pref_candidate_gap, pref_belief_gap = _compute_preferences(
+        agent_data
+    )
     if "custom_preferences" in kwargs:
         candidate_preferences = kwargs["custom_preferences"]
-        _, pref_candidate_gap, pref_belief_gap = _compute_preferences(agent_data)
-    else:
-        candidate_preferences, pref_candidate_gap, pref_belief_gap = (
-            _compute_preferences(agent_data)
-        )
 
     # Split the JAX key for two separate random samples
     key_round_1, key_round_2 = jax.random.split(key)
 
-    # Create mask for round 1
-    mask_round_1 = jnp.ones_like(candidate_preferences, dtype=bool)
-    masked_preferences = jnp.where(mask_round_1, candidate_preferences, -jnp.inf)
-
     # Sample round 1 vote
-    vote_1, softmax_probs_1 = _sample_choice(key_round_1, masked_preferences)
+    vote_1, softmax_probs_1 = _sample_choice(key_round_1, candidate_preferences)
 
     # Find the top two winners from round 1
-    top_two_winners = _find_top_two_winners(vote_1, candidate_preferences.shape[1])
+    top_two_winners = _find_top_k_winners(vote_1, candidate_preferences.shape[1], k=2)
 
     # Create mask for round 2
     num_candidates = candidate_preferences.shape[1]
@@ -62,7 +55,7 @@ def _vote_plurality(env, key, *args, **kwargs) -> dict:
     vote_2, softmax_probs_2 = _sample_choice(key_round_2, masked_preferences)
 
     # Find the winner
-    final_winner = _find_top_two_winners(vote_2, candidate_preferences.shape[1])[0]
+    final_winner = _find_winner(vote_2, candidate_preferences.shape[1])
 
     return {
         # --- Round 1 ---
@@ -80,31 +73,12 @@ def _vote_plurality(env, key, *args, **kwargs) -> dict:
     }
 
 
-def _find_top_two_winners(votes_array: ArrayLike, num_candidates: int) -> ArrayLike:
-    """Find the two candidates with the most votes.
+def strategic_vote(env, key, *args, alpha: float = 1.0, **kwargs) -> dict:
+    """Perform plurality strategic voting (vote utile).
 
-    Parameters
-    ----------
-    votes_array:
-        voting result from the simulation.
-    num_candidates:
-        number of candidates.
-
-    Returns
-    -------
-        vote data.
-    """
-    # Count votes for each unique candidate
-    counts = jnp.bincount(votes_array.astype(jnp.int32), length=num_candidates)
-
-    # Get indices that would sort the counts in ascending order
-    _, top_two_winners = jax.lax.top_k(counts, k=2)
-
-    return top_two_winners
-
-
-def strategic_vote(env, key, *args, **kwargs) -> dict:
-    """Perform plurality strategic voting.
+    Agents shift their vote toward viable candidates instead of always voting
+    for their absolute favorite. The `alpha` parameter controls how strategic
+    they are: 0 = sincere voting, higher = more strategic.
 
     Parameters
     ----------
@@ -112,6 +86,9 @@ def strategic_vote(env, key, *args, **kwargs) -> dict:
         The environment object.
     key:
         A JAX PRNG key (rng) used for seeding random operations.
+    alpha:
+        Strength of the strategic adjustment. 0 means sincere voting,
+        larger values push agents toward viable candidates.
     args:
         Variable length argument list.
     kwargs:
@@ -129,8 +106,15 @@ def strategic_vote(env, key, *args, **kwargs) -> dict:
     agent_data = _extract_env_data_vectorized(env)
     candidate_preferences, *_ = _compute_preferences(agent_data)
 
-    # Weight preferences toward the expected winner
-    adjusted_preferences = candidate_preferences * expected_probs
+    # Strategic adjustment: boost viable candidates, penalize hopeless ones.
+    # log(prob) is ~0 for favorites and very negative for outsiders.
+    # We subtract it (because lower scores = better in our convention).
+    eps = 1e-8
+    viability_bonus = jnp.log(expected_probs + eps)
+    adjusted_preferences = candidate_preferences - alpha * viability_bonus
+
+    # Drop any user-supplied custom_preferences so we can override it below
+    kwargs.pop("custom_preferences", None)
 
     # Re-run the vote with the new preferences
     new_key = jax.random.split(key)[0]
@@ -138,10 +122,8 @@ def strategic_vote(env, key, *args, **kwargs) -> dict:
         env, new_key, *args, **kwargs, custom_preferences=adjusted_preferences
     )
 
-    # Return strategic vote results + expected outcomes
-
     return {
         **strategic_results,
         "expected_results": expected_results,
-        "strategy_used": "weighted_by_expected_results",
+        "alpha": jnp.float32(alpha),
     }

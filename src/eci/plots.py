@@ -258,10 +258,8 @@ def plot_belief_trajectory(
 
 def plot_voting_metrics(combined_df: pd.DataFrame):
     """Plot voting metrics for different systems."""
-    # Set style
     sns.set_theme(style="whitegrid", context="paper", font_scale=1.2)
 
-    # Prepare data
     plot_df = combined_df.rename(
         columns={
             "vote_efficiency": "vote_efficiency",
@@ -270,8 +268,8 @@ def plot_voting_metrics(combined_df: pd.DataFrame):
         }
     )
 
-    # Create subplots
-    fig, ax = plt.subplots(1, 2, figsize=(14, 6), sharey=False)
+    # Wider figure to fit all 6 systems comfortably
+    fig, ax = plt.subplots(1, 2, figsize=(18, 6), sharey=False)
 
     # vote_efficiency
     sns.stripplot(
@@ -282,7 +280,7 @@ def plot_voting_metrics(combined_df: pd.DataFrame):
         palette="viridis",
         alpha=0.6,
         jitter=0.25,
-        legend="auto",
+        legend=False,  # legend redundant with x-axis
         ax=ax[0],
     )
     ax[0].set_title("How well do votes reflect preferences?", fontsize=14, pad=15)
@@ -298,13 +296,10 @@ def plot_voting_metrics(combined_df: pd.DataFrame):
         palette="viridis",
         alpha=0.6,
         jitter=0.25,
-        legend="auto",
+        legend=False,
         ax=ax[1],
     )
     ax[1].set_title("Does the winner satisfy the group?", fontsize=14, pad=15)
     ax[1].set_ylabel("Total Utility of Winner")
     ax[1].set_xlabel("")
-    sns.despine(left=True, bottom=True)
-    plt.tight_layout()
-
     return fig, ax

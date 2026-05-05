@@ -2,7 +2,10 @@ import jax
 import jax.numpy as jnp
 from jax.typing import ArrayLike
 
-from eci.voting_system.beliefs import _get_pref_belief_gap, _get_pref_candidate_gap
+from eci.voting_system.beliefs import (
+    _get_belief_preference_gap,
+    _get_pref_candidate_gap,
+)
 
 
 def _sample_choice(
@@ -14,7 +17,7 @@ def _sample_choice(
     Parameters
     ----------
     key:
-        The JAX Pseudo-Random Number Generator key for sampling.
+        Pseudo-Random Number Generator key for sampling.
     preferences:
         The preferences for each option.
 
@@ -23,7 +26,7 @@ def _sample_choice(
         vote: An array containing the chosen option.
         softmax_probs: The resulting softmax probability distribution.
     """
-    # Calculate softmax per preference (for the return)
+    # Calculate softmax per preference
     softmax_probs = jax.nn.softmax(preferences, axis=1)
 
     # Sample a choice
@@ -40,59 +43,55 @@ def _compute_preferences(
     Parameters
     ----------
     data:
-        The dictionary returned by _extract_env_data_vectorized containing
-    preference_means:
-        the mean preference of agents for each preference.
-    preference_precisions:
-        the precision preference of agents for each preference.
-    pref_belief_gap:
-        The gap between preference of agent and belief of agent for each preferences.
+        Dictionary containing preference_beliefs_gap and preference_candidate_gap.
 
     Returns
     -------
         preference for each choice
     """
-    # Shape: (n_agents,)
-    pref_belief_gap = _get_pref_belief_gap(data)
+    # Compute the gap between belief and preference, and candidate and preference
+    belief_preference_gap = _get_belief_preference_gap(data)
 
-    # Shape: (n_agents, n_candidates)
+    # Compute the gap between candidate and preference
     pref_candidate_gap = _get_pref_candidate_gap(data)
 
-    # (n_agents, 1) - (n_agents, n_candidates) -> (n_agents, n_candidates)
-    preference_score_per_agent = pref_belief_gap[:, jnp.newaxis] - pref_candidate_gap
+    # Compute the preference score for each candidate.
+    preference_score_per_agent = response_function(
+        belief_preference_gap, pref_candidate_gap
+    )
 
-    # Stack the candidate scores
-    return preference_score_per_agent, pref_candidate_gap, pref_belief_gap
+    return preference_score_per_agent, pref_candidate_gap, belief_preference_gap
 
 
-def response_function(data):
+def response_function(belief_preference_gap, pref_candidate_gap):
     """Compute the response for the agent.
 
     Parameters
     ----------
-    data:
-        The dictionary returned by _extract_env_data_vectorized containing
-    preference_means:
-        the mean preference of agents for each preference.
-    preference_precisions:
-        the precision preference of agents for each preference.
-    pref_belief_gap:
-        The gap between preference of agent and belief of agent for each preferences.
+    belief_preference_gap: The KL divergence between beliefs and preferences.
+    pref_candidate_gap: The KL divergence between candidate policies and preferences.
+
+    Returns
+    -------
+        preference for each choice
     """
-    # get the kl divergence between belief and preference, and candidate and preference
-    candidate_preferences, pref_candidate_gap, pref_belief_gap = _compute_preferences(
-        data
-    )
+    # Response function options one
 
     # KL(BELIEF || PREF) - KL(POLICY || PREF)
-    # preference_score_per_agent = pref_belief_gap[:, jnp.newaxis] - pref_candidate_gap
+    # preference_score_per_agent =
+    # belief_preference_gap[:, jnp.newaxis] - pref_candidate_gap
+
+    # Response function options two
 
     # KL(POLICY || PREF) / KL(BELIEF || PREF)
-    # preference_score_per_agent = pref_candidate_gap - pref_belief_gap[:, jnp.newaxis]
+    # preference_score_per_agent =
+    # pref_candidate_gap - belief_preference_gap[:, jnp.newaxis]
+
+    # Response function options three
 
     # (KL(POLICY || PREF) - KL(BELIEF || PREF)) / KL(BELIEF || PREF)
     preference_score_per_agent = (
-        pref_candidate_gap - pref_belief_gap[:, jnp.newaxis]
-    ) / pref_belief_gap[:, jnp.newaxis]
+        pref_candidate_gap - belief_preference_gap[:, jnp.newaxis]
+    ) / belief_preference_gap[:, jnp.newaxis]
 
     return preference_score_per_agent

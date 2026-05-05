@@ -8,7 +8,7 @@ import pandas as pd
 from eci.environment import EnvConfig, Environment
 from eci.voting_system.plurality import _vote_plurality
 from eci.voting_system.quadratic import _vote_quadratic
-from eci.voting_system.random_voting import _vote_random
+from eci.voting_system.random_voting import _vote_random_preferences
 
 
 def measure_batch_time(voting_func, env, key, num_simulations, **kwargs):
@@ -39,7 +39,7 @@ def main():
     parser.add_argument(
         "--output",
         type=str,
-        default="results/benchmark_results.csv",
+        default="../results/benchmark_results.csv",
         help="Where to save the benchmark CSV.",
     )
     args = parser.parse_args()
@@ -70,12 +70,14 @@ def main():
         key_quad, key_plur, key_rand = jax.random.split(base_key, 3)
 
         # Benchmark Random
-        rand_time = measure_batch_time(_vote_random, env, key_rand, args.simulations)
+        rand_time = measure_batch_time(
+            _vote_random_preferences, env, key_rand, args.simulations
+        )
         rand_iter_sec = args.simulations / rand_time
         benchmark_data.append(
             {
                 "agents": n_agents,
-                "system": "Random",
+                "system": "Rdm_Pref",
                 "total_time_s": rand_time,
                 "iter_per_sec": rand_iter_sec,
             }

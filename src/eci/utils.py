@@ -1,5 +1,6 @@
 from typing import Literal, Optional, Tuple
 
+import jax
 import jax.numpy as jnp
 import numpy as np
 from jax.typing import ArrayLike
@@ -261,3 +262,17 @@ def _extract_env_data_vectorized(env):
         "preferences": {"mean": agent_pref_means, "precision": agent_pref_precs},
         "candidates": {"mean": policy_means, "precision": policy_precs},
     }
+
+
+def _find_top_k_winners(
+    votes_array: jnp.ndarray, num_candidates: int, k: int
+) -> jnp.ndarray:
+    """Return the indices of the k candidates with the most votes."""
+    counts = jnp.bincount(votes_array.astype(jnp.int32), length=num_candidates)
+    _, winners = jax.lax.top_k(counts, k=k)
+    return winners
+
+
+def _find_winner(votes_array: jnp.ndarray, num_candidates: int) -> jnp.ndarray:
+    """Return the index of the single candidate with the most votes."""
+    return _find_top_k_winners(votes_array, num_candidates, k=1)[0]

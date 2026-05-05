@@ -12,3 +12,9 @@ htmlcov/
 .coverage
 site/
 .output.pdf
+uv.lock
+.vscode/launch.json
+docs/eci_sequential_uml.mmd
+docs/eci_sequential_uml.png
+docs/eci_sequential_uml.svg
+docs/figure_1.ipynb
