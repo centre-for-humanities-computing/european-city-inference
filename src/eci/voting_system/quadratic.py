@@ -120,25 +120,26 @@ def _compute_sequential_qv_allocation(
     return votes_matrix, credits_spent
 
 
-def strategic_quadratic_vote(env, key, budget: float = 99.0, *args, **kwargs) -> dict:
+def strategic_quadratic_vote(
+    env, key, alpha: float = 1.0, budget: float = 99.0, *args, **kwargs
+) -> dict:
     """Perform quadratic strategic voting."""
-    # 1. Get full results from the "poll"
-    poll_results = _vote_quadratic(env, key, budget, *args, **kwargs)
+    # Use the vote function to simulate a poll.
+    expected_results = _vote_quadratic(env, key, *args, **kwargs)
+    expected_probs = jnp.mean(expected_results["softmax_probs_round_1"], axis=0)
 
-    # 2. Extract what you need
-    # The popularity/weighting factor (Array)
-    expected_popularity = jnp.mean(poll_results["softmax_probs_round_1"], axis=0)
-
-    # 3. Compute Preferences
+    # Compute candidate preferences and gaps for all agents
     agent_data = _extract_env_data_vectorized(env)
     candidate_preferences, pref_candidate_gap, pref_belief_gap = _compute_preferences(
         agent_data
     )
 
-    # 4. Apply Weighting
-    adjusted_preferences = candidate_preferences * expected_popularity
+    # Boost viable candidates, penalize hopeless ones.
+    eps = 1e-8
+    viability_bonus = jnp.log(expected_probs + eps)
+    adjusted_preferences = candidate_preferences - alpha * viability_bonus
 
-    # 5. Re-run QV
+    # Re-run the vote with the new preferences
     new_key = jax.random.split(key)[0]
     strategic_results = _vote_quadratic(
         env, new_key, budget, *args, **kwargs, custom_preferences=adjusted_preferences
@@ -146,6 +147,6 @@ def strategic_quadratic_vote(env, key, budget: float = 99.0, *args, **kwargs) ->
 
     return {
         **strategic_results,
-        "expected_results": expected_popularity,  # Return the array
+        "expected_results": expected_probs,  # Return the array
         "strategy_used": "weighted_by_expected_results",
     }

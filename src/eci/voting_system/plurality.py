@@ -74,21 +74,16 @@ def _vote_plurality(env, key, *args, **kwargs) -> dict:
 
 
 def strategic_vote(env, key, *args, alpha: float = 1.0, **kwargs) -> dict:
-    """Perform plurality strategic voting (vote utile).
-
-    Agents shift their vote toward viable candidates instead of always voting
-    for their absolute favorite. The `alpha` parameter controls how strategic
-    they are: 0 = sincere voting, higher = more strategic.
+    """Perform plurality strategic voting.
 
     Parameters
     ----------
     env:
         The environment object.
     key:
-        A JAX PRNG key (rng) used for seeding random operations.
+        A JAX PRNG key for seeding random operations.
     alpha:
-        Strength of the strategic adjustment. 0 means sincere voting,
-        larger values push agents toward viable candidates.
+        Strength of the strategic adjustment.
     args:
         Variable length argument list.
     kwargs:
@@ -106,14 +101,11 @@ def strategic_vote(env, key, *args, alpha: float = 1.0, **kwargs) -> dict:
     agent_data = _extract_env_data_vectorized(env)
     candidate_preferences, *_ = _compute_preferences(agent_data)
 
-    # Strategic adjustment: boost viable candidates, penalize hopeless ones.
-    # log(prob) is ~0 for favorites and very negative for outsiders.
-    # We subtract it (because lower scores = better in our convention).
+    # Boost viable candidates, penalize hopeless ones.
     eps = 1e-8
     viability_bonus = jnp.log(expected_probs + eps)
     adjusted_preferences = candidate_preferences - alpha * viability_bonus
 
-    # Drop any user-supplied custom_preferences so we can override it below
     kwargs.pop("custom_preferences", None)
 
     # Re-run the vote with the new preferences

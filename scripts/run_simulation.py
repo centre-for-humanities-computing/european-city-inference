@@ -9,10 +9,10 @@ import pandas as pd
 from eci.environment import EnvConfig, Environment
 from eci.metrics import batch_compute_metrics
 from eci.plots import plot_preference, plot_voting_metrics
+from eci.utils import get_voter_trajectory_data
 from eci.voting_system.plurality import _vote_plurality, strategic_vote
 from eci.voting_system.quadratic import _vote_quadratic, strategic_quadratic_vote
 from eci.voting_system.random_voting import (
-    _vote_random_preferences,
     _vote_uniform_random,
 )
 
@@ -77,6 +77,10 @@ def main():
     print("Running agent belief update")
     env._run_multi_agent_inference()
 
+    # Plot trajectories for the first voter as an example
+    traj_data = get_voter_trajectory_data(env, voter_id=0)
+    fig_trajectories, _ = plot_voting_metrics(traj_data)
+
     print("Saving preference plot")
     fig_preference, _ = plot_preference(env)
 
@@ -117,14 +121,6 @@ def main():
     metrics_rdm = batch_compute_metrics(sim_rdm)
     metrics_rdm["voting_system"] = "Rdm_Uni"
 
-    # random preferences
-    print("Running Random Preferences Voting")
-    sim_rdm_pref = env.run_n_simulation(
-        _vote_random_preferences, key_rand, args.simulations
-    )
-    metrics_rdm_pref = batch_compute_metrics(sim_rdm_pref)
-    metrics_rdm_pref["voting_system"] = "Rdm_Pref"
-
     # Combine all metrics into one DataFrame
     combined_df = pd.concat(
         [
@@ -133,7 +129,6 @@ def main():
             metrics_qv,
             metrics_qv_strat,
             metrics_rdm,
-            metrics_rdm_pref,
         ],
         ignore_index=True,
     )

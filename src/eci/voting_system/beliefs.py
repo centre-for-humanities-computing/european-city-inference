@@ -19,7 +19,7 @@ def _get_belief_preference_gap(data: dict) -> jnp.ndarray:
         The computed KL divergence summed per agent.
     """
     # Extract belief parameters
-    beliefs_mean = data["beliefs"]["mean"]  # Shape: (n_agents, n_dim)
+    beliefs_mean = data["beliefs"]["mean"]
     beliefs_precision = data["beliefs"]["precision"]
 
     # Extract preference parameters
