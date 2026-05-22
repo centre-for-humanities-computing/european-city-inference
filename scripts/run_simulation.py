@@ -8,13 +8,16 @@ import pandas as pd
 
 from eci.environment import EnvConfig, Environment
 from eci.metrics import batch_compute_metrics
-from eci.plots import plot_preference, plot_voting_metrics
-from eci.utils import get_voter_trajectory_data
-from eci.voting_system.plurality import _vote_plurality, strategic_vote
-from eci.voting_system.quadratic import _vote_quadratic, strategic_quadratic_vote
-from eci.voting_system.random_voting import (
-    _vote_uniform_random,
-)
+from eci.plots import plot_belief_trajectory, plot_preference, plot_voting_metrics
+from eci.utils import _extract_env_data_vectorized, get_voter_trajectory_data
+from eci.voting_system.decisions import response_function
+from eci.voting_system.plurality import _vote_plurality
+from eci.voting_system.quadratic import _vote_quadratic
+
+# TODO: re-enable when strategic / random voting are restored.
+# from eci.voting_system.plurality import strategic_vote
+# from eci.voting_system.quadratic import strategic_quadratic_vote
+# from eci.voting_system.random_voting import _vote_uniform_random
 
 
 def main():
@@ -77,58 +80,71 @@ def main():
     print("Running agent belief update")
     env._run_multi_agent_inference()
 
-    # Plot trajectories for the first voter as an example
+    # Vectorize the environment data once for all voting systems.
+    data = _extract_env_data_vectorized(env)
+
+    # Plot belief trajectory for the first voter as an example.
+    # `get_voter_trajectory_data` returns a dict matching the kwargs of
+    # `plot_belief_trajectory`; `plot_voting_metrics` expects a DataFrame
+    # of vote outcomes and is called later on `combined_df`.
     traj_data = get_voter_trajectory_data(env, voter_id=0)
-    fig_trajectories, _ = plot_voting_metrics(traj_data)
+    fig_trajectories, _, _ = plot_belief_trajectory(**traj_data)
 
     print("Saving preference plot")
-    fig_preference, _ = plot_preference(env)
+    fig_preference, _ = plot_preference(data)
 
     base_key = jax.random.PRNGKey(args.seed)
-    key_quad, key_plur, key_rand = jax.random.split(base_key, 3)
+    # TODO: re-add `key_rand` when random voting is restored.
+    key_quad, key_plur = jax.random.split(base_key, 2)
 
     # plurality
     print("Running Plurality Voting")
-    sim_plurality = env.run_n_simulation(_vote_plurality, key_plur, args.simulations)
+    sim_plurality = env.run_n_simulation(
+        _vote_plurality, data, response_function, key_plur, args.simulations
+    )
     metrics_plurality = batch_compute_metrics(sim_plurality)
     metrics_plurality["voting_system"] = "Plurality"
 
-    # strategic plurality
-    print("Running Strategic Plurality Voting")
-    sim_plurality_strat = env.run_n_simulation(
-        strategic_vote, key_plur, args.simulations
-    )
-    metrics_plurality_strat = batch_compute_metrics(sim_plurality_strat)
-    metrics_plurality_strat["voting_system"] = "Plur_Strat"
+    # TODO: restore strategic plurality voting.
+    # print("Running Strategic Plurality Voting")
+    # sim_plurality_strat = env.run_n_simulation(
+    #     strategic_vote, data, response_function, key_plur, args.simulations
+    # )
+    # metrics_plurality_strat = batch_compute_metrics(sim_plurality_strat)
+    # metrics_plurality_strat["voting_system"] = "Plur_Strat"
 
     # quadratic
     print("Running Quadratic Voting")
-    sim_qv = env.run_n_simulation(_vote_quadratic, key_quad, args.simulations)
+    sim_qv = env.run_n_simulation(
+        _vote_quadratic, data, response_function, key_quad, args.simulations
+    )
     metrics_qv = batch_compute_metrics(sim_qv)
     metrics_qv["voting_system"] = "Quadratic"
 
-    # strategic quadratic
-    print("Running Strategic Quadratic Voting")
-    sim_qv_strat = env.run_n_simulation(
-        strategic_quadratic_vote, key_quad, args.simulations
-    )
-    metrics_qv_strat = batch_compute_metrics(sim_qv_strat)
-    metrics_qv_strat["voting_system"] = "Quad_Strat"
+    # TODO: restore strategic quadratic voting.
+    # print("Running Strategic Quadratic Voting")
+    # sim_qv_strat = env.run_n_simulation(
+    #     strategic_quadratic_vote, data, response_function, key_quad, args.simulations
+    # )
+    # metrics_qv_strat = batch_compute_metrics(sim_qv_strat)
+    # metrics_qv_strat["voting_system"] = "Quad_Strat"
 
-    # uniform random
-    print("Running Uniform Random Voting")
-    sim_rdm = env.run_n_simulation(_vote_uniform_random, key_rand, args.simulations)
-    metrics_rdm = batch_compute_metrics(sim_rdm)
-    metrics_rdm["voting_system"] = "Rdm_Uni"
+    # TODO: restore uniform random voting.
+    # print("Running Uniform Random Voting")
+    # sim_rdm = env.run_n_simulation(
+    #     _vote_uniform_random, data, response_function, key_rand, args.simulations
+    # )
+    # metrics_rdm = batch_compute_metrics(sim_rdm)
+    # metrics_rdm["voting_system"] = "Rdm_Uni"
 
     # Combine all metrics into one DataFrame
     combined_df = pd.concat(
         [
             metrics_plurality,
-            metrics_plurality_strat,
+            # metrics_plurality_strat,  # TODO: restore.
             metrics_qv,
-            metrics_qv_strat,
-            metrics_rdm,
+            # metrics_qv_strat,         # TODO: restore.
+            # metrics_rdm,              # TODO: restore.
         ],
         ignore_index=True,
     )
@@ -159,6 +175,12 @@ def main():
         dpi=150,
         bbox_inches="tight",
     )
+    fig_trajectories.savefig(
+        os.path.join(args.fig_dir, f"{run_id}_trajectories.png"),
+        dpi=150,
+        bbox_inches="tight",
+    )
+
     combined_df.to_csv(csv_path, index=False)
 
     with open(json_path, "w", encoding="utf-8") as f:
