@@ -118,12 +118,22 @@ class TestDataExtraction:
     """Tests for environment data extraction functions."""
 
     def test_get_voter_trajectory_data(self):
-        """Verify data retrieval for a specific voter."""
+        """Verify data retrieval for a specific voter.
+
+        Note: `get_voter_trajectory_data` reads `voter.trajectory[1]`, i.e.
+        the value-parent node (X2), not the input node (X1 at index 0) —
+        ω (tonic_volatility) is written on X2 and that's where the actual
+        belief evolution happens. The mock therefore needs at least 2
+        trajectory entries.
+        """
         # Mock Environment and Voter
         env = MagicMock()
         voter = MagicMock()
         voter.id = 1
-        voter.trajectory = [{"expected_mean": [0.5], "precision": [1.0]}]
+        voter.trajectory = [
+            {"expected_mean": [0.0], "precision": [1.0]},  # X1 (input) — unused here
+            {"expected_mean": [0.5], "precision": [1.0]},  # X2 (value parent) — read
+        ]
         voter.preferences = {"mean": [0.9], "precision": [2.0]}
 
         env.voters = [voter]
@@ -136,6 +146,8 @@ class TestDataExtraction:
         assert "observations" in data
         assert data["title_suffix"] == "for Voter 1"
         assert data["preference_params"] == (0.9, 2.0)
+        # Confirm we got the X2 value, not X1.
+        assert data["expected_mean"] == [0.5]
 
     def test_extract_env_data_vectorized(self):
         """Test extraction of complex nested structures into JAX arrays."""
