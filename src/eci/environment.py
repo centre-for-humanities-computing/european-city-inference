@@ -294,16 +294,6 @@ class Environment:
         -------
         Tuple
             Last attributes and node trajectories.
-
-        Notes
-        -----
-        ``tonic_volatility`` (ω) is the parameter that governs how a node's
-        log-precision drifts between observations. In the network built by
-        :meth:`_setup_network`, the relevant nodes are the **value parents**
-        of each input node (added via ``add_nodes(value_children=p)``); they
-        live at index ``num_preferences + 2 * p``. Without writing ω to those
-        parents, they would keep the pyhgf default (``-4.0``) and the per-
-        agent ``tonic_volatility`` would have no effect on belief dynamics.
         """
         # Set preferences in the network attributes
         network.attributes[-1]["preferences"] = {"mean": mu, "precision": pi}

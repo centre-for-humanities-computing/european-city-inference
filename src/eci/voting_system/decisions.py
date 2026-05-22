@@ -164,7 +164,7 @@ def _get_pref_candidate_gap(
 
 
 def response_function(data, key, mask=None, *args, **kwargs):
-    """Given simulated agent data, sample one vote per agent.
+    """Sample one vote per agent using candidate utilities.
 
     Parameters
     ----------
@@ -173,9 +173,7 @@ def response_function(data, key, mask=None, *args, **kwargs):
     key:
         JAX PRNG key for sampling.
     mask:
-        Optional boolean array of shape (n_candidates,). `True` keeps the
-        candidate; `False` excludes it. Used e.g. for round 2 of plurality
-        where only the top-2 candidates remain eligible.
+        Optional boolean array of shape for implementing multiple round(n_candidates,).
 
     Returns
     -------
@@ -199,15 +197,6 @@ def response_function(data, key, mask=None, *args, **kwargs):
 def response_function_logpdf(data, key, mask=None, *args, **kwargs):
     """Sample one vote per agent using log-likelihood under preferences.
 
-    For each agent i and candidate c, the score is
-
-        sum_d norm.logpdf(cand_mean[c, d], loc=pref_mean[i, d],
-                          scale=1/sqrt(pref_precision[i, d]))
-
-    i.e. the log-probability of the candidate's position under the agent's
-    Gaussian preference distribution. Higher = candidate is closer to the
-    agent's preferences (in precision-weighted terms).
-
     Parameters
     ----------
     data:
@@ -228,7 +217,7 @@ def response_function_logpdf(data, key, mask=None, *args, **kwargs):
     candidate_utilities : ArrayLike
         Shape (n_agents, n_candidates). The (masked) logpdf scores.
     next_key:
-        A fresh PRNG key derived from the input key via `jax.random.split`.
+        A PRNG key derived from the input key via `jax.random.split`.
     """
     pref_mean = data["preferences"]["mean"]  # (n_agents, n_dim)
     pref_precision = data["preferences"]["precision"]  # (n_agents, n_dim)
