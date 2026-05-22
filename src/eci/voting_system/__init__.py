@@ -1,21 +1,20 @@
-from .beliefs import _get_belief_preference_gap, _get_pref_candidate_gap
 from .decisions import (
-    _compute_preferences,
+    _compute_candidate_utilities,
     _sample_choice,
+    response_function,
+    response_function_pref,
 )
-from .plurality import _vote_plurality, strategic_vote
-from .quadratic import _vote_quadratic, strategic_quadratic_vote
-from .random_voting import _vote_uniform_random
+from .plurality import _vote_plurality
+from .quadratic import _vote_quadratic
 
+# TODO: restore strategic voting (`strategic_vote`, `strategic_quadratic_vote`)
+# and random voting (`_vote_uniform_random`) — currently disabled, see commented
+# blocks in plurality.py / quadratic.py.
 __all__ = [
-    "_vote_uniform_random",
     "_vote_plurality",
     "_vote_quadratic",
     "_sample_choice",
-    "_compute_preferences",
-    "_get_pref_belief_gap",
-    "_get_pref_candidate_gap",
-    "_get_belief_preference_gap",
-    "strategic_vote",
-    "strategic_quadratic_vote",
+    "_compute_candidate_utilities",
+    "response_function",
+    "response_function_pref",
 ]

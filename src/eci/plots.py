@@ -1,4 +1,4 @@
-from typing import Any, ContextManager, Optional, Tuple
+from typing import Any, ContextManager, Mapping, Optional, Tuple
 
 import matplotlib.patches as mpatches
 import matplotlib.pyplot as plt
@@ -7,8 +7,6 @@ import pandas as pd
 import seaborn as sns
 from matplotlib import gridspec
 from scipy.stats import norm
-
-from eci.utils import _extract_env_data_vectorized
 
 STYLE = "whitegrid"
 
@@ -27,12 +25,11 @@ def _get_context() -> ContextManager:
 
 
 def plot_preference(
-    env: Any,
+    env_data: Any,
     ax_array: Optional[np.ndarray] = None,
 ) -> plt.Figure:
     """Plot preference distributions."""
     # Get data
-    env_data = _extract_env_data_vectorized(env)
     v_mu, v_pr = (
         np.array(env_data["preferences"]["mean"]),
         np.array(env_data["preferences"]["precision"]),
@@ -42,9 +39,7 @@ def plot_preference(
         np.array(env_data["candidates"]["precision"]),
     )
 
-    # Determine which dimensions to plot
     n_dims = v_mu.shape[1]
-    dims_to_plot = [0, 1] if n_dims >= 2 else list(range(n_dims))
 
     # Calculate the x-range
     v_sig, c_sig = 1.0 / np.sqrt(v_pr), 1.0 / np.sqrt(c_pr)
@@ -52,13 +47,22 @@ def plot_preference(
     highs = np.concatenate([(v_mu + 4 * v_sig).ravel(), (c_mu + 4 * c_sig).ravel()])
     x = np.linspace(lows.min(), highs.max(), 500)
 
-    # Setup the figure and axes for plotting
-    n_cands, n_plots = c_mu.shape[0], len(dims_to_plot)
+    # Setup the figure and axes for plotting. Plot as many dims as axes were
+    # provided (capped by n_dims), or default to min(2, n_dims) when no axes
+    # are passed in.
+    n_cands = c_mu.shape[0]
     cand_ids = [f"C{i}" for i in range(n_cands)]
-    fig, axes = plt.subplots(
-        n_plots, 1, figsize=(6, 4), sharex=True, constrained_layout=True
-    )
-    axes = [axes] if n_plots == 1 and ax_array is None else axes
+    if ax_array is None:
+        n_plots = min(2, n_dims)
+        fig, axes = plt.subplots(
+            n_plots, 1, figsize=(6, 4 * n_plots), sharex=True, constrained_layout=True
+        )
+        axes = [axes] if n_plots == 1 else list(axes)
+    else:
+        axes = list(np.atleast_1d(ax_array))
+        n_plots = min(len(axes), n_dims)
+        fig = axes[0].figure
+    dims_to_plot = list(range(n_plots))
     colors = sns.color_palette("viridis", n_colors=n_cands)
 
     # Plot each dimension separately
@@ -254,6 +258,264 @@ def plot_belief_trajectory(
     ax_density.axis("off")
 
     return fig, ax_main, ax_density
+
+
+def plurality_results_to_share_df(
+    results_stacked: Mapping[str, Any],
+    n_candidates: int,
+) -> pd.DataFrame:
+    """Convert vmapped plurality results into the long-format DataFrame.
+
+    Parameters
+    ----------
+    results_stacked : Mapping
+        Output of `jax.vmap(_vote_plurality)`. Expects keys
+        `vote_round_1` and `vote_final_round_2`, each of shape (n_sim, n_voters).
+    n_candidates : int
+        Number of candidates (needed for the round-1 share denominator;
+        round 2 always has 2 finalists).
+    """
+    r1 = np.asarray(results_stacked["vote_round_1"])
+    r2 = np.asarray(results_stacked["vote_final_round_2"])
+    n_sim, n_voters = r1.shape
+
+    rows = []
+    for c in range(n_candidates):
+        rows.append(
+            pd.DataFrame(
+                {
+                    "candidate": f"C{c}",
+                    "share": (r1 == c).sum(axis=1) / n_voters,
+                    "round": "Round 1",
+                }
+            )
+        )
+        rows.append(
+            pd.DataFrame(
+                {
+                    "candidate": f"C{c}",
+                    "share": (r2 == c).sum(axis=1) / n_voters,
+                    "round": "Round 2",
+                }
+            )
+        )
+    return pd.concat(rows, ignore_index=True)
+
+
+def _bootstrap_proportion_ci(
+    wins: np.ndarray,
+    n_candidates: int,
+    n_boot: int = 2000,
+    ci: float = 0.95,
+    seed: int = 0,
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Percentile bootstrap CI for win probability per candidate."""
+    rng = np.random.default_rng(seed)
+    n_sim = len(wins)
+    idx = rng.integers(0, n_sim, size=(n_boot, n_sim))
+    resampled = wins[idx]
+    props = np.stack(
+        [(resampled == c).mean(axis=1) for c in range(n_candidates)], axis=1
+    )
+    lo, hi = (1 - ci) / 2, 1 - (1 - ci) / 2
+    point = np.array([(wins == c).mean() for c in range(n_candidates)])
+    return point, np.quantile(props, lo, axis=0), np.quantile(props, hi, axis=0)
+
+
+def plot_winner_distribution(
+    winners: np.ndarray,
+    n_candidates: Optional[int] = None,
+    n_boot: int = 2000,
+    ci: float = 0.95,
+    ax: Optional[plt.Axes] = None,
+) -> Tuple[plt.Figure, plt.Axes]:
+    """Bar chart of empirical win probability per candidate with bootstrap CI.
+
+    Parameters
+    ----------
+    winners : np.ndarray
+        1D array of winner indices, shape (n_sim,).
+    n_candidates : int, optional
+        Number of candidates. Inferred from `winners.max()+1` if omitted.
+    """
+    winners = np.asarray(winners)
+    if n_candidates is None:
+        n_candidates = int(winners.max()) + 1
+
+    point, lo, hi = _bootstrap_proportion_ci(winners, n_candidates, n_boot, ci)
+    err = np.stack([point - lo, hi - point])
+
+    with _get_context():
+        if ax is None:
+            fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
+        else:
+            fig = ax.figure
+
+        colors = sns.color_palette("viridis", n_colors=n_candidates)
+        x = np.arange(n_candidates)
+        ax.bar(x, point, color=colors, alpha=0.8, edgecolor="black", linewidth=0.5)
+        ax.errorbar(x, point, yerr=err, fmt="none", ecolor="black", capsize=4, lw=1.2)
+
+        ax.set_xticks(x)
+        ax.set_xticklabels([f"C{i}" for i in range(n_candidates)])
+        ax.set_ylabel("Win probability")
+        ax.set_ylim(0, 1)
+        ax.set_title(
+            f"Empirical P(win) over {len(winners)} simulations "
+            f"({int(ci * 100)}% bootstrap CI)",
+            fontsize=10,
+        )
+    return fig, ax
+
+
+def plot_winner_distribution_grouped(
+    winners_by_group: Mapping[str, np.ndarray],
+    n_candidates: Optional[int] = None,
+    n_boot: int = 2000,
+    ci: float = 0.95,
+    ax: Optional[plt.Axes] = None,
+    palette: str = "tab10",
+) -> Tuple[plt.Figure, plt.Axes]:
+    """Bar chart of empirical P(win) overlaying several datasets.
+
+    Parameters
+    ----------
+    winners_by_group : Mapping[str, np.ndarray]
+        Dict mapping group label (e.g. "pl_bl") -> 1D array of winner indices.
+    """
+    arrays = {g: np.asarray(w) for g, w in winners_by_group.items()}
+    if n_candidates is None:
+        n_candidates = int(max(a.max() for a in arrays.values())) + 1
+
+    groups = list(arrays.keys())
+    n_groups = len(groups)
+    stats = {
+        g: _bootstrap_proportion_ci(arrays[g], n_candidates, n_boot, ci) for g in groups
+    }
+
+    with _get_context():
+        if ax is None:
+            fig, ax = plt.subplots(figsize=(7, 4), constrained_layout=True)
+        else:
+            fig = ax.figure
+
+        colors = sns.color_palette(palette, n_colors=n_groups)
+        x = np.arange(n_candidates)
+        width = 0.8 / n_groups
+
+        for i, g in enumerate(groups):
+            point, lo, hi = stats[g]
+            err = np.stack([point - lo, hi - point])
+            offset = (i - (n_groups - 1) / 2) * width
+            ax.bar(
+                x + offset,
+                point,
+                width=width * 0.95,
+                color=colors[i],
+                alpha=0.85,
+                edgecolor="black",
+                linewidth=0.4,
+                label=g,
+            )
+            ax.errorbar(
+                x + offset,
+                point,
+                yerr=err,
+                fmt="none",
+                ecolor="black",
+                capsize=2,
+                lw=0.9,
+            )
+
+        ax.set_xticks(x)
+        ax.set_xticklabels([f"C{i}" for i in range(n_candidates)])
+        ax.set_ylabel("Win probability")
+        ax.set_ylim(0, 1)
+        ax.legend(fontsize=8, frameon=True, loc="upper right")
+    return fig, ax
+
+
+def compute_vote_shares(
+    results_stacked: Mapping[str, Any], n_candidates: int
+) -> np.ndarray:
+    """Per-simulation vote share per candidate, shape (n_sim, n_candidates).
+
+    Handles both output shapes:
+    - Plurality: `votes` holds per-voter candidate indices,
+      shape (n_sim, n_voters); aggregated here into counts per candidate.
+    - Quadratic: `votes` is already aggregated per candidate,
+      shape (n_sim, n_candidates); marked by the `qv_votes_matrix` key.
+
+    Each returned row sums to 1.
+    """
+    if "qv_votes_matrix" in results_stacked:
+        v = np.asarray(results_stacked["votes"], dtype=float)
+    elif "votes" in results_stacked:
+        v_raw = np.asarray(results_stacked["votes"])
+        v = np.stack(
+            [(v_raw == c).sum(axis=1) for c in range(n_candidates)], axis=1
+        ).astype(float)
+    else:
+        raise KeyError("results_stacked must contain a 'votes' key")
+    return v / np.maximum(v.sum(axis=1, keepdims=True), 1e-12)
+
+
+def plot_voting_system_comparison(
+    shares_by_system: Mapping[str, np.ndarray],
+    ax: Optional[plt.Axes] = None,
+) -> Tuple[plt.Figure, plt.Axes]:
+    """Compare mean vote share per candidate across systems.
+
+    Parameters
+    ----------
+    shares_by_system : Mapping[str, np.ndarray]
+        Dict mapping system name -> array of per-simulation vote shares,
+        shape (n_sim, n_candidates). Each row should sum to 1.
+        Use `compute_vote_shares` to build these from raw vmapped results.
+    """
+    systems = list(shares_by_system.keys())
+    arrays = {s: np.asarray(v) for s, v in shares_by_system.items()}
+    n_sim, n_candidates = next(iter(arrays.values())).shape
+
+    means = {s: v.mean(axis=0) for s, v in arrays.items()}
+    stds = {s: v.std(axis=0) for s, v in arrays.items()}
+
+    with _get_context():
+        if ax is None:
+            fig, ax = plt.subplots(figsize=(8, 4.5), constrained_layout=True)
+        else:
+            fig = ax.figure
+
+        colors = sns.color_palette("viridis", n_colors=len(systems))
+        x = np.arange(n_candidates)
+        width = 0.8 / len(systems)
+
+        for i, s in enumerate(systems):
+            offset = (i - (len(systems) - 1) / 2) * width
+            ax.bar(
+                x + offset,
+                means[s],
+                width=width * 0.95,
+                yerr=stds[s],
+                color=colors[i],
+                alpha=0.85,
+                edgecolor="black",
+                linewidth=0.5,
+                ecolor="black",
+                capsize=3,
+                label=s,
+            )
+
+        ax.set_xticks(x)
+        ax.set_xticklabels([f"C{i}" for i in range(n_candidates)])
+        ax.set_ylabel("Vote share")
+        ax.set_ylim(0, 1)
+        ax.set_title(
+            f"Voting system comparison (mean ± 1 std over {n_sim} simulations)",
+            fontsize=11,
+        )
+        ax.legend(loc="upper right", frameon=True)
+    return fig, ax
 
 
 def plot_voting_metrics(combined_df: pd.DataFrame):

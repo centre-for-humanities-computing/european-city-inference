@@ -243,7 +243,7 @@ class Environment:
         return self.sim_result
 
     def run_n_simulation(
-        self, func, key, n_simulations: int, *args, **kwargs
+        self, func, data, response_function, key, n_simulations: int, *args, **kwargs
     ) -> Dict[int, Any]:
         """
         Run multiple simulations and aggregate the results.
@@ -265,13 +265,12 @@ class Environment:
             Dictionary containing results from all simulation runs.
         """
         all_results = {}
-
         current_key = key
 
         # TODO: Consider parallel execution for large n_simulations using vmap or pmap
         for i in tqdm.tqdm(range(n_simulations), desc="Running Simulations"):
             current_key, subkey = jax.random.split(current_key)
-            all_results[i] = func(self, subkey, *args, **kwargs)
+            all_results[i] = func(data, response_function, subkey, *args, **kwargs)
 
         self.sim_result = all_results
         return self.sim_result
@@ -295,12 +294,27 @@ class Environment:
         -------
         Tuple
             Last attributes and node trajectories.
+
+        Notes
+        -----
+        ``tonic_volatility`` (ω) is the parameter that governs how a node's
+        log-precision drifts between observations. In the network built by
+        :meth:`_setup_network`, the relevant nodes are the **value parents**
+        of each input node (added via ``add_nodes(value_children=p)``); they
+        live at index ``num_preferences + 2 * p``. Without writing ω to those
+        parents, they would keep the pyhgf default (``-4.0``) and the per-
+        agent ``tonic_volatility`` would have no effect on belief dynamics.
         """
-        # Set preferences and tonic volatility in the network attributes
+        # Set preferences in the network attributes
         network.attributes[-1]["preferences"] = {"mean": mu, "precision": pi}
-        preferences_idx = network.input_idxs
-        for idx in preferences_idx:
+
+        # Set ω on input nodes (kept for backward compatibility) and, more
+        # importantly, on their value parents which drive the HGF dynamics.
+        n_pref = self.config.num_preferences
+        for p, idx in enumerate(network.input_idxs):
             network.attributes[idx]["tonic_volatility"] = tonic_volatility
+            value_parent_idx = n_pref + 2 * p
+            network.attributes[value_parent_idx]["tonic_volatility"] = tonic_volatility
 
         # Give observations to the network
         network.input_data(input_data=self.input_data)

@@ -105,16 +105,16 @@ def batch_compute_metrics(sim_results: Dict[int, Dict[str, Any]]) -> pd.DataFram
     first_res = sim_results[keys[0]]
 
     # Number of candidates
-    n_cand = first_res["softmax_probs_round_1"].shape[1]
+    n_cand = first_res["softmax"].shape[1]
 
     # Get preferences
     pref_key = "pref_candidate_gap"
     if pref_key not in first_res:
-        pref_key = "candidate_preferences"
+        pref_key = "candidate_utilities"
     pref_candidate_gap = jnp.stack([sim_results[k][pref_key] for k in keys])
 
     # Get winners
-    winners = jnp.array([sim_results[k]["final_winner"] for k in keys], dtype=int)
+    winners = jnp.array([sim_results[k]["winner"] for k in keys], dtype=int)
 
     if "qv_votes_matrix" in first_res:
         # Quadratic Voting Case
@@ -122,7 +122,7 @@ def batch_compute_metrics(sim_results: Dict[int, Dict[str, Any]]) -> pd.DataFram
 
     else:
         # Plurality Voting Case
-        votes_indices = jnp.stack([sim_results[k]["vote_round_1"] for k in keys])
+        votes_indices = jnp.stack([sim_results[k]["votes"] for k in keys])
 
         # Convert to one-hot encoding
         votes_matrix = jax.nn.one_hot(votes_indices, num_classes=n_cand)

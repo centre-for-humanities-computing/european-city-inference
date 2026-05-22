@@ -35,8 +35,6 @@ class Voter(Agent):
         'precision' vectors.
     tonic_volatility :
         A parameter representing the voter's baseline level of choice volatility.
-    budget :
-        The voter's budget for influencing their decision, by default 100.0.
     perceived_outcome :
         The voter's perception of the election outcome, used for Theory of Mind,
         by default None.

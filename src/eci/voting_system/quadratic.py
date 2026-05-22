@@ -1,152 +1,158 @@
 import jax
 import jax.numpy as jnp
-from jax.typing import ArrayLike
-
-from eci.utils import _extract_env_data_vectorized
-from eci.voting_system.decisions import _compute_preferences, _sample_choice
 
 
-def _vote_quadratic(env, key, budget: float = 99.0, *args, **kwargs) -> dict:
+# TODO: Allow positive and negative
+def _vote_quadratic(
+    data, response_function, key, *args, budget: float = 99.0, **kwargs
+) -> dict:
     """Perform quadratic voting.
 
     Parameters
     ----------
-    env:
-        The environment object.
+    data:
+        Agent data dict (beliefs, preferences, candidates).
+    response_function:
+        Function (data, key) -> (vote, softmax_probs, candidate_preferences, key).
+        Used to obtain per-agent candidate preferences (and a fresh key) that
+        drive the QV allocation.
     key:
         A JAX PRNG key (rng) used for seeding random operations.
-    args:
-        Variable length argument list.
     budget:
-        Token for quadratic voting.
-    kwargs:
-        Arbitrary keyword arguments.
+        Token budget for quadratic voting.
 
     Returns
     -------
         vote data.
     """
-    # Extract all agent beliefs and preferences
-    agent_data = _extract_env_data_vectorized(env)
-
-    # Evaluate candidate scores for each agent
-    if "custom_preferences" in kwargs:
-        candidate_preferences = kwargs["custom_preferences"]
-        _, pref_candidate_gap, pref_belief_gap = _compute_preferences(agent_data)
-    else:
-        # Extract all agent beliefs and preferences
-        candidate_preferences, pref_candidate_gap, pref_belief_gap = (
-            _compute_preferences(agent_data)
-        )
-    candidate_ids = jnp.array([c.id for c in env.candidates])
+    # Sample round 1 preferences.
+    _, softmax_probs, candidate_utilities, key = response_function(data, key)
 
     # Allocation QV
     votes_matrix, credits_spent = _compute_sequential_qv_allocation(
-        key, candidate_preferences, budget
+        key, candidate_utilities, budget
     )
 
-    # Compute final winner
-    total_votes = jnp.sum(votes_matrix, axis=0)
-    final_winner_idx = jnp.argmax(total_votes)
-    final_winner = candidate_ids[final_winner_idx]
-
-    top_investment_indices = jnp.argmax(votes_matrix, axis=1)
-    vote_choice_legacy = candidate_ids[top_investment_indices]
-
-    row_sums = jnp.sum(votes_matrix, axis=1, keepdims=True)
-    safe_row_sums = jnp.where(row_sums == 0, 1.0, row_sums)
-    pseudo_probs = votes_matrix / safe_row_sums
-
-    sorted_indices = jnp.argsort(total_votes)[::-1]
-    top_two_indices = sorted_indices[:2]
-    top_two_winners = candidate_ids[top_two_indices]
-
-    if top_two_winners.shape[0] < 2:
-        top_two_winners = jnp.pad(
-            top_two_winners, (0, 2 - top_two_winners.shape[0]), mode="edge"
-        )
-
     return {
-        # round 1
-        "vote_round_1": vote_choice_legacy,
-        "softmax_probs_round_1": pseudo_probs,
-        "first_round_winners": top_two_winners,
-        # round 2 (duplicata)
-        "vote_final_round_2": vote_choice_legacy,
-        "softmax_probs_final_round_2": pseudo_probs,
-        "final_winner": final_winner,
-        # qv data specific
-        "total_votes_per_candidate": total_votes,
+        "votes": jnp.sum(votes_matrix, axis=0),
+        "softmax": softmax_probs,
+        "winner": jnp.argmax(jnp.sum(votes_matrix, axis=0)),
         "credits_spent": credits_spent,
         "qv_votes_matrix": votes_matrix,
-        "pref_candidate_gap": pref_candidate_gap,
-        "candidate_preferences": candidate_preferences,
-        "pref_belief_gap": pref_belief_gap,
+        "candidate_utilities": candidate_utilities,
     }
 
 
 def _compute_sequential_qv_allocation(
-    key: jax.random.PRNGKey, candidate_preferences: ArrayLike, budget: float
-) -> tuple[ArrayLike, ArrayLike]:
-    num_agents, num_candidates = candidate_preferences.shape
+    key,
+    candidate_utilities,
+    budget,
+    num_votes: int = 5,
+    noise_scale: float = 0.05,
+):
+    """Allocate QV credits to candidates per agent.
 
-    # Normalize preferences to get weights for each vote
-    pref_sums = jnp.sum(candidate_preferences, axis=1, keepdims=True)
-    normalized_prefs = candidate_preferences / (
-        pref_sums + 1e-9
-    )  # Avoid division by zero
+    Each agent picks candidates without replacement with
+    probability proportional to softmax(candidate_utilities).
 
-    # Use normalized preferences to determine the number of votes
-    num_votes = 5  # Fixed number of votes
-    vote_weights = normalized_prefs * (
-        budget / num_votes
-    )  # Distribute budget across votes
+    Parameters
+    ----------
+    key:
+        A JAX PRNG key for seeding random operations.
+    candidate_utilities:
+        Per-agent candidate utilities that drive the QV allocation.
+    budget:
+        Token budget for quadratic voting.
+    num_votes:
+        Number of distinct candidates each agent can vote for (without replacement).
+    noise_scale:
+        Scale of jitter added to credit weights to avoid deterministic ties.
 
-    credits_spent = jnp.zeros((num_agents, num_candidates))
-    current_prefs = candidate_preferences
-    keys = jax.random.split(key, num_votes)
+    Returns
+    -------
+    votes_matrix:
+        Shape (n_agents, n_candidates). Votes allocated per agent per candidate.
+    credits_spent:
+        Shape (n_agents, n_candidates). Total credits spent per agent per candidate.
+    """
+    _, num_candidates = candidate_utilities.shape
+    num_votes = min(num_votes, num_candidates)
+    per_pick_credit = budget / num_votes
 
-    for i in range(num_votes):
-        # Sample choice based on current preferences
-        choice_indices, _ = _sample_choice(keys[i], current_prefs)
-        # Create one-hot encoding for chosen candidates
-        choice_one_hot = jax.nn.one_hot(choice_indices, num_candidates)
-        # Distribute credits spent based on vote weights
-        credits_spent += choice_one_hot * vote_weights
-        # Remove chosen candidate from current preferences to avoid re-selection
-        current_prefs -= choice_one_hot * 1e9
+    weights = jax.nn.softmax(candidate_utilities, axis=1) * per_pick_credit
 
+    # Gumbel-top-k: top-k of (logits + Gumbel) ≡ sampling k distinct items
+    # with prob ∝ softmax(logits).
+    gumbel_key, noise_key = jax.random.split(key)
+    gumbel = -jnp.log(
+        -jnp.log(jax.random.uniform(gumbel_key, candidate_utilities.shape))
+    )
+    _, top_idx = jax.lax.top_k(candidate_utilities + gumbel, num_votes)
+    picks = jnp.sum(jax.nn.one_hot(top_idx, num_candidates), axis=1)
+
+    # Jitter avoids fully-deterministic credits when num_candidates <= num_votes
+    # (every candidate is picked once). Clip ≥0 so sqrt stays real.
+    noise = jax.random.normal(noise_key, weights.shape) * (
+        noise_scale * per_pick_credit
+    )
+    credits_spent = picks * jnp.maximum(weights + noise, 0.0)
     votes_matrix = jnp.floor(jnp.sqrt(credits_spent)).astype(jnp.int32)
     return votes_matrix, credits_spent
 
 
-def strategic_quadratic_vote(
-    env, key, alpha: float = 1.0, budget: float = 99.0, *args, **kwargs
-) -> dict:
-    """Perform quadratic strategic voting."""
-    # Use the vote function to simulate a poll.
-    expected_results = _vote_quadratic(env, key, *args, **kwargs)
-    expected_probs = jnp.mean(expected_results["softmax_probs_round_1"], axis=0)
+# def strategic_quadratic_vote(
+#     data,
+#     response_function,
+#     key,
+#     *args,
+#     alpha: float = 1.0,
+#     budget: float = 99.0,
+#     **kwargs,
+# ) -> dict:
+#     """Perform quadratic strategic voting.
 
-    # Compute candidate preferences and gaps for all agents
-    agent_data = _extract_env_data_vectorized(env)
-    candidate_preferences, pref_candidate_gap, pref_belief_gap = _compute_preferences(
-        agent_data
-    )
+#     Parameters
+#     ----------
+#     data:
+#         Agent data dict (beliefs, preferences, candidates).
+#     response_function:
+#         Function (data, key) -> (vote, softmax_probs, candidate_preferences, key).
+#     key:
+#         A JAX PRNG key for seeding random operations.
+#     alpha:
+#         Strength of the strategic adjustment.
+#     budget:
+#         Token budget for quadratic voting.
 
-    # Boost viable candidates, penalize hopeless ones.
-    eps = 1e-8
-    viability_bonus = jnp.log(expected_probs + eps)
-    adjusted_preferences = candidate_preferences - alpha * viability_bonus
+#     Returns
+#     -------
+#         vote data.
+#     """
+#     # Poll via response_function to get preferences and expected vote shares.
+#     key, poll_key = jax.random.split(key)
+#     _, softmax_probs, candidate_preferences, _ = response_function(data, poll_key)
+#     expected_probs = jnp.mean(softmax_probs, axis=0)
 
-    # Re-run the vote with the new preferences
-    new_key = jax.random.split(key)[0]
-    strategic_results = _vote_quadratic(
-        env, new_key, budget, *args, **kwargs, custom_preferences=adjusted_preferences
-    )
+#     # Boost viable candidates, penalize hopeless ones.
+#     # softmax(prefs + alpha * log(p)) ∝ p^alpha * exp(prefs).
+#     eps = 1e-8
+#     adjusted_preferences = candidate_preferences + jnp.log(expected_probs + eps)
 
-    return {
-        **strategic_results,
-        "expected_results": expected_probs,  # Return the array
-        "strategy_used": "weighted_by_expected_results",
-    }
+#     # Build a strategic response function that samples from adjusted preferences
+#     def strategic_response_function(data, key, mask=None, *args, **kwargs):
+#         prefs = adjusted_preferences
+#         if mask is not None:
+#             prefs = jnp.where(mask, prefs, -jnp.inf)
+#         sample_key, next_key = jax.random.split(key)
+#         vote, softmax_probs = _sample_choice(sample_key, prefs)
+#         return vote, softmax_probs, prefs, next_key
+
+#     # Run the QV vote with the strategic response function
+#     strategic_results = _vote_quadratic(
+#         data, strategic_response_function, key, *args, budget=budget, **kwargs
+#     )
+
+#     return {
+#         **strategic_results,
+#         "alpha": jnp.float32(alpha),
+#     }

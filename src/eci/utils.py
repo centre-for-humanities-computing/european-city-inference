@@ -211,8 +211,8 @@ def get_voter_trajectory_data(env, voter_id: int, pref_idx: int = 0):
 
     # Extract the relevant data from the voter's trajectory and preferences
     return {
-        "expected_mean": voter.trajectory[0]["expected_mean"],
-        "precisions": voter.trajectory[0]["precision"],
+        "expected_mean": voter.trajectory[1]["expected_mean"],
+        "precisions": voter.trajectory[1]["precision"],
         "observations": env.input_data[:, pref_idx],
         "preference_params": (
             voter.preferences["mean"][pref_idx],
