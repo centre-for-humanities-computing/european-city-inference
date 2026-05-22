@@ -14,8 +14,6 @@ def _vote_quadratic(
         Agent data dict (beliefs, preferences, candidates).
     response_function:
         Function (data, key) -> (vote, softmax_probs, candidate_preferences, key).
-        Used to obtain per-agent candidate preferences (and a fresh key) that
-        drive the QV allocation.
     key:
         A JAX PRNG key (rng) used for seeding random operations.
     budget:
@@ -43,6 +41,7 @@ def _vote_quadratic(
     }
 
 
+# TODO: Implement different allocation strategies.
 def _compute_sequential_qv_allocation(
     key,
     candidate_utilities,

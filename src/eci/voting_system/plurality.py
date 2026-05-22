@@ -7,7 +7,7 @@ def _vote_plurality(data, response_function, key, *args, **kwargs) -> dict:
     Parameters
     ----------
     data:
-        Agent data dict (beliefs, preferences, candidates).
+        Agent data (beliefs, preferences, candidates).
     response_function:
         Function (data, key) -> (vote, softmax_probs, candidate_preferences, key).
     key:
