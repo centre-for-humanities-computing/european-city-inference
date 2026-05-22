@@ -34,23 +34,29 @@ Here is an example to run a simulation with 200 voters and 6 candidates:
 ```python
 import jax
 from eci.environment import Environment, EnvConfig
-from eci.voting_system.random_voting import _vote_random
+from eci.utils import _extract_env_data_vectorized
+from eci.voting_system import _vote_plurality, response_function
 
-# 1. Configure the Environment
+# 1. Configure the environment
 config = EnvConfig(
-    num_voters=200, 
-    num_candidates=6, 
+    num_voters=200,
+    num_candidates=6,
     num_preferences=4,
-    seed=42
+    seed=42,
 )
 
-# 2. Initialize Simulation
+# 2. Initialize the simulation and run agent belief update (HGF)
 env = Environment(config)
+env._run_multi_agent_inference()
 
-# 3. Run Simulation (100 iterations)
+# 3. Extract the vectorized agent data once.
+data = _extract_env_data_vectorized(env)
+
+# 4. Run 100 plurality elections.
 key = jax.random.PRNGKey(42)
-results = env.run_n_simulation(_vote_random, key, n_simulations=100)
-
+results = env.run_n_simulation(
+    _vote_plurality, data, response_function, key, n_simulations=100
+)
 ```
 
 ## 📂 Project Structure
