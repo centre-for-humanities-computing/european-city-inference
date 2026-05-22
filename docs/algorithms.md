@@ -18,11 +18,18 @@ Each agent $i$ evaluates candidates $c$ based on how well the candidate's policy
     Measure how far the candidate's policy is from the preference.
     $$R_{cand, c} = D_{KL}(Q_c \parallel P_i)$$
 
-3.  **Compute Candidate preference**:
-    The reduction of dissatisfaction offered by the candidate.
-    $$U_{i,c} = R_{belief} - R_{cand, c}$$
-    * If $U > 0$: Candidate is better than the status quo (reduces divergence).
-    * If $U < 0$: Candidate is worse (increases divergence).
+3.  **Compute Candidate utility (normalized)**:
+    The *relative* reduction of dissatisfaction offered by the candidate,
+    normalized by the agent's current dissatisfaction so that scores are
+    comparable across agents with different baseline gaps.
+    $$U_{i,c} = \frac{R_{belief} - R_{cand, c}}{R_{belief}} = 1 - \frac{R_{cand, c}}{R_{belief}}$$
+    * If $U > 0$: Candidate is better than the status quo (closer to preference than current belief).
+    * If $U = 0$: Candidate is exactly as good as the status quo.
+    * If $U < 0$: Candidate is worse (further from preference than current belief).
+
+    A small epsilon is added to $R_{belief}$ in the denominator to guard
+    against division by zero when beliefs already equal preferences. See
+    `_compute_candidate_utilities` in `eci.voting_system.decisions`.
 
 4.  **Generate Selection Probabilities (Softmax)**:
     Convert into a probability distribution for the vote.
