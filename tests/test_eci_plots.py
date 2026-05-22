@@ -1,5 +1,3 @@
-from unittest.mock import MagicMock, patch
-
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
@@ -33,14 +31,14 @@ class TestPlots:
             },
         }
 
-    @patch("eci.plots._extract_env_data_vectorized")
-    def test_plot_preference_runs(self, mock_extract, mock_env_data):
-        """Verifie that plot_preference generates a figure without error."""
-        mock_extract.return_value = mock_env_data
-        env = MagicMock()
+    def test_plot_preference_runs(self, mock_env_data):
+        """Verifie that plot_preference generates a figure without error.
 
+        `plot_preference` now takes the already-vectorized data dict directly
+        (the caller is expected to invoke `_extract_env_data_vectorized` first).
+        """
         # Execution
-        fig, axes = plot_preference(env)
+        fig, axes = plot_preference(mock_env_data)
 
         # Assertions
         assert isinstance(fig, plt.Figure)

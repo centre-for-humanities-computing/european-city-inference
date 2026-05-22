@@ -77,18 +77,25 @@ class TestEnvironment:
     @patch("eci.environment.generate_observations")
     @patch("eci.environment.Network")
     def test_run_n_simulation_flow(self, mock_net, mock_gen, mock_config):
-        """Test the simulation loop execution."""
+        """Test the simulation loop execution.
+
+        Signature is now: run_n_simulation(func, data, response_function,
+        key, n_simulations, ...) and func is called as
+        func(data, response_function, subkey, *args, **kwargs).
+        """
         env = Environment(mock_config)
 
-        # Mock a simulation function
-        # Signature: func(env, key, *args)
         mock_sim_func = MagicMock()
         mock_sim_func.return_value = {"winner": 1}
+        mock_response_function = MagicMock()
+        data = {"dummy": "data"}
 
         key = jax.random.PRNGKey(0)
         n_sims = 3
 
-        results = env.run_n_simulation(mock_sim_func, key, n_simulations=n_sims)
+        results = env.run_n_simulation(
+            mock_sim_func, data, mock_response_function, key, n_simulations=n_sims
+        )
 
         # Verify results storage
         assert len(results) == 3
@@ -97,6 +104,11 @@ class TestEnvironment:
 
         # Verify call count
         assert mock_sim_func.call_count == 3
+
+        # Verify positional args are (data, response_function, subkey, ...)
+        call_args, _ = mock_sim_func.call_args_list[0]
+        assert call_args[0] is data
+        assert call_args[1] is mock_response_function
 
         # Verify env.sim_result is updated
         assert env.sim_result == results

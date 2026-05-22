@@ -2,7 +2,7 @@ import jax
 import jax.numpy as jnp
 import pytest
 
-from eci.voting_system.decisions import _compute_preferences, _sample_choice
+from eci.voting_system.decisions import _compute_candidate_utilities, _sample_choice
 
 
 @pytest.fixture
@@ -60,24 +60,61 @@ def test_sample_choice_determinism():
     assert softmax_probs[0, 0] > 0.99
 
 
-def test_compute_preferences_logic(mock_decision_data):
-    """Verifies that the score calculation (Belief Gap - Candidate Gap) is correct."""
-    data = mock_decision_data
+def test_compute_candidate_utilities_logic():
+    """Verifies the normalized score (belief_gap - cand_gap) / belief_gap.
 
-    pref_scores, cand_gap, belief_gap = _compute_preferences(data)
+    Uses non-degenerate beliefs so belief_gap > 0 and the normalization
+    is well-defined (the eps guard only kicks in when belief_gap == 0).
+    """
+    # Beliefs deliberately offset from preferences so KL(belief‖pref) > 0.
+    data = {
+        "beliefs": {
+            "mean": jnp.array([[1.0, 1.0]]),
+            "precision": jnp.array([[1.0, 1.0]]),
+        },
+        "preferences": {
+            "mean": jnp.array([[0.0, 0.0]]),
+            "precision": jnp.array([[1.0, 1.0]]),
+        },
+        "candidates": {
+            "mean": jnp.array([[0.0, 0.0], [2.0, 2.0]]),
+            "precision": jnp.array([[1.0, 1.0], [1.0, 1.0]]),
+        },
+    }
 
-    assert pref_scores.shape == (3, 2)
-    assert cand_gap.shape == (3, 2)
-    assert belief_gap.shape == (3,)
+    pref_scores, cand_gap, belief_gap = _compute_candidate_utilities(data)
 
-    expected_score = belief_gap[0] - cand_gap[0, 0]
-    assert jnp.isclose(pref_scores[0, 0], expected_score)
+    assert pref_scores.shape == (1, 2)
+    assert cand_gap.shape == (1, 2)
+    assert belief_gap.shape == (1,)
+
+    # Normalized score = (belief_gap - cand_gap) / belief_gap
+    expected_0 = (belief_gap[0] - cand_gap[0, 0]) / belief_gap[0]
+    expected_1 = (belief_gap[0] - cand_gap[0, 1]) / belief_gap[0]
+    assert jnp.isclose(pref_scores[0, 0], expected_0, atol=1e-5)
+    assert jnp.isclose(pref_scores[0, 1], expected_1, atol=1e-5)
 
 
-def test_compute_preferences_broadcast(mock_decision_data):
-    """Verifies that the subtraction broadcasts correctly across all candidates."""
-    pref_scores, cand_gap, belief_gap = _compute_preferences(mock_decision_data)
+def test_compute_candidate_utilities_broadcast():
+    """Score normalization broadcasts correctly across agents and candidates."""
+    data = {
+        "beliefs": {
+            "mean": jnp.array([[1.0, 1.0], [2.0, 2.0]]),
+            "precision": jnp.array([[1.0, 1.0], [1.0, 1.0]]),
+        },
+        "preferences": {
+            "mean": jnp.array([[0.0, 0.0], [0.0, 0.0]]),
+            "precision": jnp.array([[1.0, 1.0], [1.0, 1.0]]),
+        },
+        "candidates": {
+            "mean": jnp.array([[0.5, 0.5], [1.5, 1.5]]),
+            "precision": jnp.array([[1.0, 1.0], [1.0, 1.0]]),
+        },
+    }
+
+    pref_scores, cand_gap, belief_gap = _compute_candidate_utilities(data)
 
     for i in range(pref_scores.shape[0]):
         for j in range(pref_scores.shape[1]):
-            assert jnp.isclose(pref_scores[i, j], belief_gap[i] - cand_gap[i, j])
+            expected = (belief_gap[i] - cand_gap[i, j]) / belief_gap[i]
+            assert jnp.isclose(pref_scores[i, j], expected, atol=1e-5)

@@ -1,102 +1,87 @@
-from unittest.mock import MagicMock, patch
+"""Tests for plurality voting.
+
+Notes on the refactor:
+- `_find_top_two_winners` was generalised to `_find_top_k_winners` in
+  `eci.utils`. The single-winner case used in plurality is now
+  `eci.utils._find_winner`.
+- `_vote_plurality` no longer takes `env` but `(data, response_function, key)`
+  and the second-round (top-2 runoff) is currently disabled (commented out)
+  inside the function.
+- `strategic_vote` is currently commented out in `plurality.py`.
+"""
 
 import jax
 import jax.numpy as jnp
+import pytest
 
-from eci.voting_system.plurality import (
-    _find_top_two_winners,
-    _vote_plurality,
-    strategic_vote,
-)
+from eci.utils import _find_top_k_winners, _find_winner
+from eci.voting_system.plurality import _vote_plurality
 
 
 class TestPluralityVoting:
     """Test plurality voting."""
 
-    def test_find_top_two_winners_clear_winner(self):
-        """Test that the top 2 are found correctly when counts are distinct."""
+    def test_find_winner_clear(self):
+        """Top-1 is found when counts are distinct."""
         votes = jnp.array([1, 1, 1, 0])
-        winners = _find_top_two_winners(votes, num_candidates=3)
-        assert winners[0] == 1
-        assert winners[1] == 0
+        winner = _find_winner(votes, num_candidates=3)
+        assert int(winner) == 1
 
-    def test_find_top_two_winners_tie(self):
-        """Test behavior when there is a tie for 2nd place."""
+    def test_find_top_k_winners_clear(self):
+        """Top-2 is found when counts are distinct (replaces _find_top_two_winners)."""
+        votes = jnp.array([1, 1, 1, 0])
+        winners = _find_top_k_winners(votes, num_candidates=3, k=2)
+        assert int(winners[0]) == 1
+        assert int(winners[1]) == 0
+
+    def test_find_top_k_winners_tie(self):
+        """Top-2 still returns a valid 2nd place when there is a tie."""
         votes = jnp.array([0, 0, 1, 2])
-        winners = _find_top_two_winners(votes, num_candidates=3)
+        winners = _find_top_k_winners(votes, num_candidates=3, k=2)
+        assert int(winners[0]) == 0
+        assert int(winners[1]) in [1, 2]
 
-        assert winners[0] == 0
-        assert winners[1] in [
-            1,
-            2,
-        ]
+    def test_vote_plurality_basic_flow(self):
+        """Smoke-test the new (data, response_function, key) signature."""
+        # 3 agents, 3 candidates. Use a fake response_function so we can
+        # control the votes without driving full HGF/KL machinery.
+        n_agents, n_cand = 3, 3
+        votes = jnp.array([0, 1, 0])
+        softmax = jnp.full((n_agents, n_cand), 1.0 / n_cand)
+        utilities = jnp.zeros((n_agents, n_cand))
 
-    @patch("eci.voting_system.plurality._sample_choice")
-    @patch("eci.voting_system.plurality._compute_preferences")
-    @patch("eci.voting_system.plurality._extract_env_data_vectorized")
-    def test_vote_plurality_round_logic(self, mock_extract, mock_compute, mock_sample):
-        """Verifies the 2-Round Plurality Logic."""
-        mock_extract.return_value = {}
-        fake_prefs = jnp.array([[1.0, 1.0, 1.0], [1.0, 1.0, 1.0], [1.0, 1.0, 1.0]])
-        mock_compute.return_value = (fake_prefs, "gap1", "gap2")
+        def fake_response_function(data, key, mask=None, *args, **kwargs):
+            sample_key, next_key = jax.random.split(key)
+            return votes, softmax, utilities, next_key
 
-        def sample_side_effect(key, prefs):
-            is_round_2 = jnp.any(prefs == -jnp.inf)
-
-            if not is_round_2:
-                votes = jnp.array([0, 1, 0])
-                return votes, jnp.zeros_like(prefs)
-            else:
-                votes = jnp.array([0, 0, 0])
-                return votes, jnp.zeros_like(prefs)
-
-        mock_sample.side_effect = sample_side_effect
-
-        key = jax.random.PRNGKey(42)
-        env = MagicMock()
-        results = _vote_plurality(env, key)
-
-        assert results["final_winner"] == 0
-        assert jnp.array_equal(
-            jnp.sort(results["first_round_winners"]), jnp.array([0, 1])
-        )
-
-        assert mock_sample.call_count == 2
-
-        args_round_2, _ = mock_sample.call_args
-        prefs_passed_round_2 = args_round_2[1]
-
-        assert jnp.all(prefs_passed_round_2[:, 2] == -jnp.inf)
-        assert jnp.all(prefs_passed_round_2[:, 0] != -jnp.inf)
-
-    @patch("eci.voting_system.plurality._vote_plurality")
-    @patch("eci.voting_system.plurality._compute_preferences")
-    @patch("eci.voting_system.plurality._extract_env_data_vectorized")
-    def test_strategic_vote_weighting(self, _, mock_compute, mock_plurality_func):
-        """Verifies that Strategic Vote."""
-        poll_probs = jnp.array([[0.9, 0.1], [0.9, 0.1]])
-
-        mock_poll_results = {"softmax_probs_round_1": poll_probs, "final_winner": 0}
-
-        mock_final_results = {"final_winner": 0, "strategy_used": "yes"}
-
-        mock_plurality_func.side_effect = [mock_poll_results, mock_final_results]
-
-        base_prefs = jnp.array([[1.0, 1.0], [1.0, 1.0]])
-        mock_compute.return_value = (base_prefs, None, None)
-
-        env = MagicMock()
+        data = {}  # response_function ignores it here
         key = jax.random.PRNGKey(0)
-        results = strategic_vote(env, key)
 
-        assert mock_plurality_func.call_count == 2
+        results = _vote_plurality(data, fake_response_function, key)
 
-        call_args_2 = mock_plurality_func.call_args_list[1]
-        kwargs_2 = call_args_2.kwargs
+        assert set(results.keys()) == {
+            "votes",
+            "winner",
+            "softmax",
+            "candidate_utilities",
+        }
+        # Candidate 0 has 2 votes, candidate 1 has 1 vote, candidate 2 has 0.
+        assert int(results["winner"]) == 0
+        assert jnp.array_equal(results["votes"], votes)
+        assert results["softmax"].shape == (n_agents, n_cand)
 
-        assert "custom_preferences" in kwargs_2
+    @pytest.mark.skip(
+        reason="2-round plurality (top-2 runoff) is currently commented out in "
+        "_vote_plurality. Re-enable once the runoff block is restored."
+    )
+    def test_vote_plurality_round_logic(self):
+        """Verifies the 2-Round Plurality Logic. TODO: restore."""
+        pass
 
-        expected_adjusted = jnp.array([[0.9, 0.1], [0.9, 0.1]])
-
-        assert jnp.allclose(kwargs_2["custom_preferences"], expected_adjusted)
-        assert results["strategy_used"] == "weighted_by_expected_results"
+    @pytest.mark.skip(
+        reason="strategic_vote is currently commented out in plurality.py. "
+        "Re-enable once strategic plurality voting is restored."
+    )
+    def test_strategic_vote_weighting(self):
+        """Verifies Strategic Plurality Vote weighting. TODO: restore."""
+        pass

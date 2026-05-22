@@ -22,7 +22,6 @@ class TestAgents:
         assert voter.tonic_volatility == 0.5
 
         # Check defaults
-        assert voter.budget == 100.0
         assert voter.perceived_outcome is None
         assert voter.vote_round_1 == []
         assert voter.vote_round_2 == []

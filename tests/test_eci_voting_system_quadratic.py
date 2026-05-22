@@ -1,120 +1,99 @@
-from unittest.mock import MagicMock, patch
+"""Tests for quadratic voting.
+
+Notes on the refactor:
+- `_vote_quadratic` no longer takes `env` but `(data, response_function, key)`.
+  Its return dict now uses keys `votes`, `winner`, `softmax`,
+  `candidate_utilities`, `credits_spent`, `qv_votes_matrix` (no more
+  `final_winner`, `vote_round_1`, `softmax_probs_round_1`).
+- `_compute_sequential_qv_allocation` was rewritten with Gumbel-top-k
+  sampling — it no longer calls `_sample_choice` in a loop, so the old
+  `mock_sample.call_count == 5` assertion no longer applies.
+- `strategic_quadratic_vote` is currently commented out.
+"""
 
 import jax
 import jax.numpy as jnp
+import pytest
 
 from eci.voting_system.quadratic import (
-    _compute_sequential_qv_allocation,  # <-- Ajout de l'import ici
+    _compute_sequential_qv_allocation,
     _vote_quadratic,
-    strategic_quadratic_vote,
 )
-
-
-def mock_sample_choice_impl(key, prefs):
-    """Mock implementation of sample choice for testing."""
-    return jnp.argmax(prefs, axis=1), None
 
 
 class TestQuadraticVoting:
     """Test quadratic voting."""
 
-    @patch("eci.voting_system.quadratic._compute_sequential_qv_allocation")
-    @patch("eci.voting_system.quadratic._compute_preferences")
-    @patch("eci.voting_system.quadratic._extract_env_data_vectorized")
-    def test_vote_quadratic_winner_logic(self, mock_extract, mock_compute, mock_alloc):
-        """Test that _vote_quadratic correctly identifies the winner."""
-        env = MagicMock()
-        c1 = MagicMock()
-        c1.id = 10
-        c2 = MagicMock()
-        c2.id = 20
-        env.candidates = [c1, c2]
+    def test_vote_quadratic_winner_logic(self):
+        """Smoke-test the new (data, response_function, key) signature.
 
-        mock_extract.return_value = {}
-        mock_compute.return_value = (jnp.zeros((2, 2)), None, None)
-        mock_votes_matrix = jnp.array([[10, 0], [5, 0]])
-        mock_credits = jnp.zeros((2, 2))
-        mock_alloc.return_value = (mock_votes_matrix, mock_credits)
+        Candidate 0 receives much higher utility than candidate 1, so Gumbel-
+        top-k allocation should put all its credits on candidate 0 and
+        `winner` should be 0.
+        """
+        n_agents, n_cand = 3, 2
+        # Strongly prefer candidate 0 for every agent.
+        utilities = jnp.tile(jnp.array([10.0, -10.0]), (n_agents, 1))
+        softmax = jax.nn.softmax(utilities, axis=1)
+        votes = jnp.zeros((n_agents,), dtype=jnp.int32)
 
-        results = _vote_quadratic(env, jax.random.PRNGKey(0))
+        def fake_response_function(data, key, mask=None, *args, **kwargs):
+            sample_key, next_key = jax.random.split(key)
+            return votes, softmax, utilities, next_key
 
-        assert results["final_winner"] == 10
-        assert jnp.array_equal(results["qv_votes_matrix"], mock_votes_matrix)
-        assert jnp.all(results["vote_round_1"] == 10)
-
-    @patch("eci.voting_system.quadratic._vote_quadratic")
-    @patch("eci.voting_system.quadratic._compute_preferences")
-    @patch("eci.voting_system.quadratic._extract_env_data_vectorized")
-    def test_strategic_quadratic_vote_flow(
-        self, mock_extract, mock_compute, mock_qv_func
-    ):
-        """Test the strategic voting."""
-        poll_probs = jnp.array([[0.8, 0.2], [0.8, 0.2]])
-
-        poll_return = {
-            "softmax_probs_round_1": poll_probs,
-            "total_votes_per_candidate": jnp.array([100, 20]),
-        }
-        final_return = {"final_winner": 10}
-
-        mock_qv_func.side_effect = [poll_return, final_return]
-
-        base_prefs = jnp.array([[1.0, 1.0], [1.0, 1.0]])
-        mock_compute.return_value = (base_prefs, None, None)
-
-        env = MagicMock()
-        key = jax.random.PRNGKey(0)
-        strategic_quadratic_vote(env, key)
-
-        assert mock_qv_func.call_count == 2, (
-            f"Expected 2 calls, got {mock_qv_func.call_count}"
+        results = _vote_quadratic(
+            data={}, response_function=fake_response_function, key=jax.random.PRNGKey(0)
         )
 
-        _, kwargs_2 = mock_qv_func.call_args_list[1]
+        assert set(results.keys()) == {
+            "votes",
+            "softmax",
+            "winner",
+            "credits_spent",
+            "qv_votes_matrix",
+            "candidate_utilities",
+        }
+        assert int(results["winner"]) == 0
+        assert results["qv_votes_matrix"].shape == (n_agents, n_cand)
+        # Candidate 0 dominates total votes.
+        assert int(results["votes"][0]) >= int(results["votes"][1])
 
-        assert "custom_preferences" in kwargs_2
-
-        expected_adjusted = jnp.array([[0.8, 0.2], [0.8, 0.2]])
-
-        assert jnp.allclose(kwargs_2["custom_preferences"], expected_adjusted)
-
-    @patch(
-        "eci.voting_system.quadratic._sample_choice",
-        side_effect=mock_sample_choice_impl,
-    )
-    def test_compute_sequential_qv_allocation_standard(self, mock_sample):
-        """Test the actual computation of QV allocation without patching it."""
+    def test_compute_sequential_qv_allocation_shapes(self):
+        """Allocation produces integer vote matrices of the expected shape."""
         key = jax.random.PRNGKey(42)
         # 2 agents, 3 candidates
-        candidate_preferences = jnp.array([[0.8, 0.1, 0.1], [0.2, 0.5, 0.3]])
+        candidate_utilities = jnp.array([[0.8, 0.1, 0.1], [0.2, 0.5, 0.3]])
         budget = 100.0
 
         votes_matrix, credits_spent = _compute_sequential_qv_allocation(
-            key, candidate_preferences, budget
+            key, candidate_utilities, budget
         )
 
         assert votes_matrix.shape == (2, 3)
         assert credits_spent.shape == (2, 3)
-        assert mock_sample.call_count == 5  # Ensure the loop ran 5 times
         assert votes_matrix.dtype == jnp.int32
+        # Credits should be non-negative (sqrt would fail otherwise).
+        assert jnp.all(credits_spent >= 0.0)
 
-    @patch(
-        "eci.voting_system.quadratic._sample_choice",
-        side_effect=mock_sample_choice_impl,
-    )
-    def test_compute_sequential_qv_allocation_edge_cases(self, mock_sample):
-        """Test zero budget and zero preferences."""
+    def test_compute_sequential_qv_allocation_zero_budget(self):
+        """Zero budget should yield zero votes and zero credits without NaNs."""
         key = jax.random.PRNGKey(42)
-        # Preferences all zero
-        candidate_preferences = jnp.zeros((2, 3))
+        candidate_utilities = jnp.zeros((2, 3))
         budget = 0.0
 
         votes_matrix, credits_spent = _compute_sequential_qv_allocation(
-            key, candidate_preferences, budget
+            key, candidate_utilities, budget
         )
 
-        # Ensure no NaNs were generated by division by zero
         assert not jnp.isnan(credits_spent).any()
         assert not jnp.isnan(votes_matrix).any()
-        # Ensure outputs are zeroed out as expected with 0 budget
         assert jnp.all(votes_matrix == 0)
+        assert jnp.all(credits_spent == 0.0)
+
+    @pytest.mark.skip(
+        reason="strategic_quadratic_vote is currently commented out in "
+        "quadratic.py. Re-enable once strategic QV is restored."
+    )
+    def test_strategic_quadratic_vote_flow(self):
+        """Test the strategic QV flow. TODO: restore."""
+        pass

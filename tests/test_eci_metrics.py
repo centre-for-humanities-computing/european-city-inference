@@ -1,3 +1,14 @@
+"""Tests for metrics.
+
+Notes on the refactor:
+- Voting functions now return dicts with keys `winner`, `votes`, `softmax`,
+  `candidate_utilities`, `qv_votes_matrix` (was: `final_winner`,
+  `vote_round_1`, `softmax_probs_round_1`, `candidate_preferences`).
+- `batch_compute_metrics` reads `winner`, `softmax`, `votes` /
+  `qv_votes_matrix`, and falls back from `pref_candidate_gap` to
+  `candidate_utilities` for the per-candidate preference array.
+"""
+
 import jax.numpy as jnp
 import pandas as pd
 import pytest
@@ -14,17 +25,14 @@ class TestMetricsCalculations:
     """Tests for individual metric functions."""
 
     def test_winner_satisfaction(self):
-        """Test that winner satisfaction sums the correct column of preferences."""
+        """Winner satisfaction sums the correct column of preferences."""
         prefs = jnp.array([[10.0, 0.0, 0.0], [10.0, 5.0, 0.0], [10.0, 0.0, 0.0]])
 
-        score_0 = _winner_satisfaction(prefs, winner=0)
-        assert score_0 == 30.0
-
-        score_1 = _winner_satisfaction(prefs, winner=1)
-        assert score_1 == 5.0
+        assert _winner_satisfaction(prefs, winner=0) == 30.0
+        assert _winner_satisfaction(prefs, winner=1) == 5.0
 
     def test_vote_efficiency_perfect_match(self):
-        """Test efficiency when votes perfectly align with preferences."""
+        """Efficiency when votes perfectly align with preferences."""
         prefs = jnp.array([[10.0, 0.0]])
         votes = jnp.array([[10, 0]])
 
@@ -32,7 +40,7 @@ class TestMetricsCalculations:
         assert eff == 10.0
 
     def test_vote_efficiency_split_votes(self):
-        """Test efficiency when an agent splits votes between candidates."""
+        """Efficiency when an agent splits votes between candidates."""
         prefs = jnp.array([[10.0, 5.0]])
         votes = jnp.array([[5, 5]])
 
@@ -40,7 +48,7 @@ class TestMetricsCalculations:
         assert eff == 7.5
 
     def test_vote_efficiency_zero_votes(self):
-        """Test that division by zero is handled (safe_tokens)."""
+        """Division by zero is handled via safe_tokens."""
         prefs = jnp.array([[10.0, 5.0]])
         votes = jnp.array([[0, 0]])
 
@@ -49,7 +57,7 @@ class TestMetricsCalculations:
         assert not jnp.isnan(eff)
 
     def test_compute_metrics_integration(self):
-        """Test the wrapper function returns the expected dictionary."""
+        """The wrapper returns the expected dictionary."""
         prefs = jnp.array([[10.0, 0.0]])
         votes = jnp.array([[1, 0]])
         winner = 0
@@ -66,40 +74,40 @@ class TestBatchMetrics:
 
     @pytest.fixture
     def mock_plurality_results(self):
-        """Mock results for a Plurality Voting simulation."""
+        """Mock results matching the new _vote_plurality return shape."""
         return {
             0: {
-                "final_winner": 0,
-                "vote_round_1": jnp.array([0, 0]),
-                "candidate_preferences": jnp.array([[1.0, 0.0], [1.0, 0.0]]),
-                "softmax_probs_round_1": jnp.zeros((2, 2)),
+                "winner": 0,
+                "votes": jnp.array([0, 0]),  # Both voted for candidate 0
+                "candidate_utilities": jnp.array([[1.0, 0.0], [1.0, 0.0]]),
+                "softmax": jnp.zeros((2, 2)),
             },
             1: {
-                "final_winner": 1,
-                "vote_round_1": jnp.array([1, 1]),  # Both voted 1
-                "candidate_preferences": jnp.array([[0.0, 1.0], [0.0, 1.0]]),
-                "softmax_probs_round_1": jnp.zeros((2, 2)),
+                "winner": 1,
+                "votes": jnp.array([1, 1]),  # Both voted for candidate 1
+                "candidate_utilities": jnp.array([[0.0, 1.0], [0.0, 1.0]]),
+                "softmax": jnp.zeros((2, 2)),
             },
         }
 
     @pytest.fixture
     def mock_quadratic_results(self):
-        """Mock results for a Quadratic Voting simulation (has qv_votes_matrix)."""
+        """Mock results matching the new _vote_quadratic return shape."""
         return {
             0: {
-                "final_winner": 0,
+                "winner": 0,
                 "qv_votes_matrix": jnp.array([[10, 0], [10, 0]]),
-                "candidate_preferences": jnp.array([[1.0, 0.0], [1.0, 0.0]]),
-                "softmax_probs_round_1": jnp.zeros((2, 2)),
+                "candidate_utilities": jnp.array([[1.0, 0.0], [1.0, 0.0]]),
+                "softmax": jnp.zeros((2, 2)),
             }
         }
 
     def test_batch_metrics_plurality(self, mock_plurality_results):
-        """Test processing of standard Plurality results (one-hot conversion)."""
+        """Processing of Plurality results (one-hot conversion from `votes`)."""
         df = batch_compute_metrics(mock_plurality_results)
 
         assert isinstance(df, pd.DataFrame)
-        assert len(df) == 2  # 2 Simulations
+        assert len(df) == 2  # 2 simulations
         assert "winner_satisfaction" in df.columns
         assert "vote_efficiency" in df.columns
         assert "simulation_id" in df.columns
@@ -109,7 +117,7 @@ class TestBatchMetrics:
         assert row_0["vote_efficiency"] == 2.0
 
     def test_batch_metrics_quadratic(self, mock_quadratic_results):
-        """Test processing of Quadratic results (uses qv_votes_matrix)."""
+        """Processing of Quadratic results (uses qv_votes_matrix)."""
         df = batch_compute_metrics(mock_quadratic_results)
 
         assert len(df) == 1
@@ -118,14 +126,14 @@ class TestBatchMetrics:
         assert row["winner_satisfaction"] == 2.0
         assert row["vote_efficiency"] == 2.0
 
-    def test_batch_metrics_alt_pref_key(self):
-        """Test that it handles 'pref_candidate_gap'."""
+    def test_batch_metrics_pref_candidate_gap_key(self):
+        """batch_compute_metrics prefers `pref_candidate_gap` when present."""
         mock_data = {
             0: {
-                "final_winner": 0,
-                "vote_round_1": jnp.array([0]),
+                "winner": 0,
+                "votes": jnp.array([0]),
                 "pref_candidate_gap": jnp.array([[5.0, 0.0]]),
-                "softmax_probs_round_1": jnp.zeros((1, 2)),
+                "softmax": jnp.zeros((1, 2)),
             }
         }
 
