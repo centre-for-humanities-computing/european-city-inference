@@ -20,7 +20,6 @@
 
 ::: eci.voting_system.plurality
 ::: eci.voting_system.quadratic
-::: eci.voting_system.random_voting
 
 # Decision Making
 
