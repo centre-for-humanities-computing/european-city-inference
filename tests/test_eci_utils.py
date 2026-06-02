@@ -4,10 +4,9 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
+from eci.observations import _get_parameter_trajectory, generate_observations
 from eci.utils import (
     _extract_env_data_vectorized,
-    _get_parameter_trajectory,
-    generate_observations,
     get_voter_trajectory_data,
     kl_divergence,
 )

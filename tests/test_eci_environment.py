@@ -25,8 +25,8 @@ class TestEnvironment:
             tonic_volatility_std=0.01,
         )
 
-    @patch("eci.environment.generate_observations")
-    @patch("eci.environment.Network")
+    @patch("eci.world.generate_observations")
+    @patch("eci.perceptual.Network")
     def test_initialization(self, mock_network_cls, mock_gen_obs, mock_config):
         """Test that __init__ correctly."""
         # Setup Mocks
@@ -36,8 +36,18 @@ class TestEnvironment:
         # Initialize Environment
         env = Environment(mock_config)
 
-        # Data Generation
-        mock_gen_obs.assert_called_once_with(n_nodes=3, n_steps=10, scenario=2)
+        # Data Generation — assert all the kwargs we now pass through.
+        mock_gen_obs.assert_called_once_with(
+            n_nodes=3,
+            n_steps=10,
+            scenario=2,
+            shock_pattern=None,
+            dispersion=1.0,
+            obs_low=0.0,
+            obs_high=1.0,
+            recover=False,
+            seed=None,
+        )
         assert env.input_data.shape == (10, 3)
 
         # Network Setup
@@ -58,8 +68,8 @@ class TestEnvironment:
         ids = [a.id for a in env.agents]
         assert ids == list(range(7))
 
-    @patch("eci.environment.generate_observations")
-    @patch("eci.environment.Network")
+    @patch("eci.world.generate_observations")
+    @patch("eci.perceptual.Network")
     def test_gather_agent_data(self, mock_net, mock_gen, mock_config):
         """Test that agent parameters are correctly gathered into JAX arrays."""
         mock_gen.return_value = jnp.zeros((10, 3))
@@ -74,8 +84,8 @@ class TestEnvironment:
         # Volatilities: (n_voters,)
         assert vols.shape == (5,)
 
-    @patch("eci.environment.generate_observations")
-    @patch("eci.environment.Network")
+    @patch("eci.world.generate_observations")
+    @patch("eci.perceptual.Network")
     def test_run_n_simulation_flow(self, mock_net, mock_gen, mock_config):
         """Test the simulation loop execution.
 
@@ -83,6 +93,7 @@ class TestEnvironment:
         key, n_simulations, ...) and func is called as
         func(data, response_function, subkey, *args, **kwargs).
         """
+        mock_gen.return_value = jnp.zeros((10, 3))
         env = Environment(mock_config)
 
         mock_sim_func = MagicMock()
@@ -116,8 +127,8 @@ class TestEnvironment:
     def test_run_single_agent_inference_logic(self, mock_config):
         """Test the logic inside the single agent inference step."""
         with (
-            patch("eci.environment.generate_observations") as mock_gen,
-            patch("eci.environment.Network"),
+            patch("eci.world.generate_observations") as mock_gen,
+            patch("eci.perceptual.Network"),
         ):
             mock_gen.return_value = jnp.zeros((5, 2))
             env = Environment(mock_config)
@@ -148,9 +159,9 @@ class TestEnvironment:
             assert last == "mock_last_attrs"
             assert traj == "mock_node_trajs"
 
-    @patch("eci.environment.vmap")
-    @patch("eci.environment.generate_observations")
-    @patch("eci.environment.Network")
+    @patch("eci.perceptual.vmap")
+    @patch("eci.world.generate_observations")
+    @patch("eci.perceptual.Network")
     def test_run_multi_agent_inference_distribution(
         self, mock_net_cls, mock_gen, mock_vmap, mock_config
     ):
