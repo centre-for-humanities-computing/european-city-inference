@@ -1,21 +1,27 @@
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Literal, Optional
 
 import jax
 import jax.numpy as jnp
 import tqdm
-from jax import vmap
-from jax.tree_util import Partial, tree_map
-from pyhgf.model import Network
+from jax.tree_util import tree_map
 
 from eci.agents import Agent, Candidate, Voter
-from eci.utils import generate_observations
+from eci.perceptual import PerceptualModel
+from eci.population import Population, PopulationConfig
+from eci.world import World
 
 
 @dataclass
 class EnvConfig:
     """
     Centralized configuration for the simulation environment.
+
+    Kept as a flat dataclass for backward compatibility. Internally,
+    :class:`Environment` decomposes it into
+    :class:`~eci.population.PopulationConfig`,
+    :class:`~eci.world.WorldConfig` and
+    :class:`~eci.perceptual.HGFConfig`.
 
     Attributes
     ----------
@@ -29,10 +35,23 @@ class EnvConfig:
         Number of time steps in the simulation. Default is 362.
     scenario : int, optional
         Scenario identifier for input generation. Default is 2.
+        Note: with `shock_pattern=None`, scenario 1 and 2 are equivalent.
     seed : int, optional
-        Random seed for reproducibility. Default is 42.
+        Random seed for JAX agent generation. Default is 42.
+        Does NOT control observation noise — see `obs_seed`.
+    dispersion : float, optional
+        Multiplier for the Gaussian noise added to observations
+        (σ = 0.05 * dispersion * (obs_high - obs_low)). Default is 1.0.
+    shock_pattern : {"phase", "sudden", "trend"} or None, optional
+        Type of shock pattern injected in the observations. Only active
+        when `scenario == 2`. Default is None.
+    obs_seed : int or None, optional
+        Seed for the numpy RNG used inside `generate_observations`.
+        None → non-reproducible. Default is None.
+    obs_low, obs_high : float, optional
+        Output range for observations. Defaults to ``[0.0, 1.0]``.
     precision_state : float, optional
-        Precision parameter for the HGF state nodes. Default is 10.0.
+        Precision parameter for the HGF state nodes. Default is 100.0.
     tonic_volatility_mean : float, optional
         Mean of the tonic volatility distribution. Default is -2.0.
     tonic_volatility_std : float, optional
@@ -46,287 +65,265 @@ class EnvConfig:
     scenario: int = 2
     seed: int = 42
 
+    # Observation generation
+    dispersion: float = 1.0
+    shock_pattern: Optional[Literal["phase", "sudden", "trend"]] = None
+    obs_seed: Optional[int] = None
+    obs_low: float = 0.0
+    obs_high: float = 1.0
+    recover: bool = False
+
     # HGF Model Parameters
-    precision_state: float = 10.0
+    precision_state: float = 100.0
     tonic_volatility_mean: float = -2.0
     tonic_volatility_std: float = 0.01
 
 
+# ---------------------------------------------------------------------------
+# Orchestrator
+# ---------------------------------------------------------------------------
 class Environment:
-    """
-    Simulation environment for the election scenario.
+    """High-level simulation environment.
 
-    Manages agent creation, HGF network configuration, and simulation execution.
+    Composes a :class:`Population`, a :class:`World` and a
+    :class:`PerceptualModel`. All three are accessible as attributes
+    (``env.population``, ``env.world``, ``env.perceptual``) for code
+    that wants the new API; legacy attributes are preserved as proxies.
 
     Attributes
     ----------
     config : EnvConfig
-        Configuration object containing simulation parameters.
-    key : jax.Array
-        JAX PRNG key for random number generation.
-    voters : List[Voter]
-        List of voter agents.
-    candidates : List[Candidate]
-        List of candidate agents.
-    agents : List[Agent]
-        Combined list of all agents.
-    network : Network
-        The underlying PyHGF network model.
+        The flat config that was used to build the environment.
+    population : Population
+        Voter & candidate arrays (JAX pytree).
+    world : World
+        Observation stream (JAX pytree).
+    perceptual : PerceptualModel
+        HGF wrapper. Stateful; produces JAX pytrees on ``.run()``.
+
+    Legacy attributes
+    -----------------
+    voters : list[Voter]
+    candidates : list[Candidate]
+    agents : list[Agent]
     input_data : jax.Array
-        Observation data for the simulation steps.
+    network : pyhgf.model.Network
+    node_trajectories : Any, set after inference
+    last_attributes : Any, set after inference
+    preferences_idx : list[int], set after inference
     """
 
     def __init__(self, config: EnvConfig):
-        """
-        Initialize the simulation environment.
+        """Build the population, world and perceptual model from ``config``.
 
         Parameters
         ----------
         config : EnvConfig
-            Configuration object containing all simulation parameters.
+            Flat configuration for the whole simulation.
         """
-        # Store configuration and initialize random key
         self.config = config
         self.key = jax.random.PRNGKey(config.seed)
 
-        # State containers
-        self.voters: List[Voter] = []
-        self.candidates: List[Candidate] = []
-        self.agents: List[Agent] = []
+        # --- composable building blocks ------------------------------
+        self.population = Population.random(
+            PopulationConfig.from_env_config(config),
+            key=self.key,
+        )
+        self.world = World.from_env_config(config)
+        self.perceptual = PerceptualModel.from_env_config(config)
 
-        # Simulation artifacts
+        self.voters: List[Voter] = self.population.as_voters(start_id=0)
+        self.candidates: List[Candidate] = self.population.as_candidates(
+            start_id=len(self.voters)
+        )
+        self.agents: List[Agent] = [*self.voters, *self.candidates]
+
         self.node_trajectories: Optional[Any] = None
+        self.last_attributes: Optional[Any] = None
         self.preferences_idx: Optional[List[int]] = None
         self.winner_id: Optional[int] = None
         self.sim_result: Optional[Dict] = None
 
-        # Initialization
-        self._init_agents()
-        # TODO: Allow custom network
-        self.network = self._setup_network()
+    @property
+    def input_data(self) -> jax.Array:
+        """Observation stream — proxy to ``self.world.observations``."""
+        return self.world.observations
 
-        # Input data generation
-        self.input_data = generate_observations(
-            n_nodes=self.config.num_preferences,
-            n_steps=self.config.num_steps,
-            scenario=self.config.scenario,
-        )
+    @input_data.setter
+    def input_data(self, value) -> None:
+        """Override the observation stream with a manual array.
 
-    def _setup_network(self) -> Network:
+        Backward-compat shim for the ``env.input_data = manual_obs``
+        pattern used in the tutorials: rebuilds ``self.world`` around the
+        supplied array so the (frozen, pytree) :class:`World` invariant
+        is preserved.
         """
-        Configure and return the Hierarchical Gaussian Filter (HGF) network.
+        self.world = World(observations=jnp.asarray(value))
 
-        Returns
-        -------
-        Network
-            Configured PyHGF network instance.
+    @property
+    def network(self):
+        """The underlying HGF network — proxy to ``self.perceptual.network``."""
+        return self.perceptual.network
+
+    # ------------------------------------------------------------------
+    # Inference
+    # ------------------------------------------------------------------
+    def _run_multi_agent_inference(self) -> None:
+        """Run HGF inference for the whole population (vmapped)."""
+        result = self.perceptual.run(self.population, self.world)
+        self.last_attributes = result["last_attributes"]
+        self.node_trajectories = result["node_trajectories"]
+        self.preferences_idx = result["preferences_idx"]
+        for i, voter in enumerate(self.voters):
+            voter.trajectory = tree_map(lambda x, _i=i: x[_i], self.node_trajectories)
+
+    def _run_single_agent_inference(self, mu, pi, tonic_volatility, network=None):
+        """Legacy single-agent inference path. Delegates to PerceptualModel.
+
+        Kept for tests that mock-patch this method. New code should use
+        ``self.perceptual.run(...)``.
         """
-        network = Network(update_type="unbounded")
-
-        # Add continuous state nodes
-        network.add_nodes(
-            kind="continuous-state",
-            n_nodes=self.config.num_preferences,
-            precision=self.config.precision_state,
-            expected_precision=self.config.precision_state,
+        return self.perceptual._run_one_agent(
+            mu,
+            pi,
+            tonic_volatility,
+            self.world.observations,
+            network if network is not None else self.perceptual.network,
         )
 
-        # Configure hierarchy
-        for i in range(self.config.num_preferences):
-            network.add_nodes(value_children=i)
-            network.add_nodes(volatility_children=i)
-
-        return network
-
-    def _init_agents(self) -> None:
-        """Create voters and candidates."""
-        self.key, voter_key, candidate_key = jax.random.split(self.key, 3)
-
-        # generate preference data for voters and candidates
-        v_means, v_precs, v_vols = self._generate_voter_data(voter_key)
-        c_means, c_precs = self._generate_candidate_data(candidate_key)
-
-        # instanciate voter and candidate objects
-        self.voters = self._instantiate_voters(v_means, v_precs, v_vols, start_id=0)
-        self.candidates = self._instantiate_candidates(
-            c_means, c_precs, start_id=len(self.voters)
-        )
-        # combine all agents into a single list for easy access
-        self.agents.extend(self.voters)
-        self.agents.extend(self.candidates)
-
-    def _generate_voter_data(self, key: jax.Array):
-        """Generate raw JAX arrays for voter parameters."""
-        k1, k2, k3 = jax.random.split(key, 3)
-        v_means = jax.random.uniform(
-            k1,
-            shape=(self.config.num_voters, self.config.num_preferences),
-            minval=0.0,
-            maxval=2.0,
-        )
-        v_precs = jax.random.uniform(
-            k2,
-            shape=(self.config.num_voters, self.config.num_preferences),
-            minval=0.4,
-            maxval=1.0,
-        )
-        v_vols = (
-            jax.random.normal(k3, shape=(self.config.num_voters,))
-            * self.config.tonic_volatility_std
-        ) + self.config.tonic_volatility_mean
-
-        return v_means, v_precs, v_vols
-
-    def _generate_candidate_data(self, key: jax.Array):
-        """Generate raw JAX arrays for candidate parameters."""
-        k1, k2 = jax.random.split(key, 2)
-        c_means = jax.random.uniform(
-            k1,
-            shape=(self.config.num_candidates, self.config.num_preferences),
-            minval=0.0,
-            maxval=2.0,
-        )
-        c_precs = jax.random.uniform(
-            k2,
-            shape=(self.config.num_candidates, self.config.num_preferences),
-            minval=0.3,
-            maxval=1.0,
-        )
-        return c_means, c_precs
-
-    def _instantiate_voters(
-        self, v_means, v_precs, v_vols, start_id: int
-    ) -> list[Voter]:
-        """Create Voter objects from raw data arrays."""
-        voters = []
-        for i in range(self.config.num_voters):
-            voters.append(
-                Voter(
-                    id=start_id + i,
-                    preferences={"mean": v_means[i], "precision": v_precs[i]},
-                    tonic_volatility=float(v_vols[i]),
-                )
-            )
-        return voters
-
-    def _instantiate_candidates(
-        self, c_means, c_precs, start_id: int
-    ) -> list[Candidate]:
-        """Create Candidate objects from raw data arrays."""
-        candidates = []
-        for i in range(self.config.num_candidates):
-            candidates.append(
-                Candidate(
-                    id=start_id + i,
-                    policy={"mean": c_means[i], "precision": c_precs[i]},
-                )
-            )
-        return candidates
-
-    def _gather_agent_data(self) -> Tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
-        """
-        Gather data from Voter objects into JAX arrays for batch processing.
-
-        Returns
-        -------
-        Tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]
-            A tuple containing (means, precisions, volatilities) as JAX arrays.
-        """
-        all_mus = jnp.array([v.preferences["mean"] for v in self.voters])
-        all_pis = jnp.array([v.preferences["precision"] for v in self.voters])
-        all_volatilities = jnp.array([v.tonic_volatility for v in self.voters])
-        return all_mus, all_pis, all_volatilities
-
+    # ------------------------------------------------------------------
+    # Simulation runners (unchanged signatures, unchanged semantics)
+    # ------------------------------------------------------------------
     def run_one_simulation(self, func, key, *args, **kwargs) -> dict:
         """Run a single simulation using the provided function and key."""
         self.sim_result = func(self, key, *args, **kwargs)
         return self.sim_result
 
     def run_n_simulation(
-        self, func, data, response_function, key, n_simulations: int, *args, **kwargs
+        self,
+        func,
+        data,
+        response_function,
+        key,
+        n_simulations: int,
+        *args,
+        **kwargs,
     ) -> Dict[int, Any]:
-        """
-        Run multiple simulations and aggregate the results.
+        """Run ``n_simulations`` simulations sequentially, returning a dict.
 
-        Parameters
-        ----------
-        func : callable
-            The simulation function to execute.
-        key : jax.Array
-            Initial PRNG key.
-        n_simulations : int
-            Number of simulations to run.
-        *args, **kwargs
-            Additional arguments passed to `func`.
-
-        Returns
-        -------
-        Dict[int, Any]
-            Dictionary containing results from all simulation runs.
+        TODO: replace the Python loop with ``jax.vmap`` over PRNG keys.
         """
-        all_results = {}
+        all_results: Dict[int, Any] = {}
         current_key = key
-
-        # TODO: Consider parallel execution for large n_simulations using vmap or pmap
         for i in tqdm.tqdm(range(n_simulations), desc="Running Simulations"):
             current_key, subkey = jax.random.split(current_key)
             all_results[i] = func(data, response_function, subkey, *args, **kwargs)
-
         self.sim_result = all_results
         return self.sim_result
 
-    def _run_single_agent_inference(self, mu, pi, tonic_volatility, network):
-        """
-        Prepare network and run inference for a single agent.
+    def vote_outcome_over_time(
+        self,
+        response_function,
+        voting_function,
+        n_simulations: int = 100,
+        metric: str = "win",
+        key=None,
+        **vote_kwargs,
+    ) -> jax.Array:
+        """Per-candidate election outcome at each timestep over the population.
+
+        At every timestep ``t``, all voters vote using their belief **at that
+        timestep** (preferences and candidate policies stay fixed); the voting
+        rule aggregates the population's votes into an election. Over
+        ``n_simulations`` stochastic runs we report, per candidate:
+
+        - ``metric="win"`` (default): the **win frequency** — fraction of
+          elections that candidate wins (its ``P(win)``).
+        - ``metric="share"``: the mean **vote share** (fraction of votes /
+          credits it receives).
+
+        This is the population generalisation of the single-voter, per-timestep
+        vote distribution shown in tutorial 5.
+
+        Requires :meth:`_run_multi_agent_inference` to have been called first.
 
         Parameters
         ----------
-        mu : jax.Array
-            Preference means.
-        pi : jax.Array
-            Preference precisions.
-        tonic_volatility : float
-            Agent's tonic volatility.
-        network : Network
-            The HGF network instance.
+        response_function:
+            A :class:`~eci.decision.ResponseFunction`.
+        voting_function:
+            ``_vote_plurality`` or ``_vote_quadratic``.
+        n_simulations:
+            Stochastic elections averaged per timestep.
+        metric:
+            ``"win"`` (P(win) per candidate) or ``"share"`` (mean vote share).
+        key:
+            JAX PRNG key (defaults to ``PRNGKey(0)``).
+        **vote_kwargs:
+            Forwarded to ``voting_function`` (e.g. ``num_votes=None`` for the
+            adaptive QV allocation, or ``budget=...``).
 
         Returns
         -------
-        Tuple
-            Last attributes and node trajectories.
+        outcome : jax.Array, shape (n_candidates, n_steps)
+            Per-candidate win frequency (``metric="win"``) or mean vote share
+            (``metric="share"``) at each timestep. Columns sum to 1.
         """
-        # Set preferences in the network attributes
-        network.attributes[-1]["preferences"] = {"mean": mu, "precision": pi}
+        from eci.utils import _extract_env_data_vectorized
 
-        # Set ω on input nodes (kept for backward compatibility) and, more
-        # importantly, on their value parents which drive the HGF dynamics.
-        n_pref = self.config.num_preferences
-        for p, idx in enumerate(network.input_idxs):
-            network.attributes[idx]["tonic_volatility"] = tonic_volatility
-            value_parent_idx = n_pref + 2 * p
-            network.attributes[value_parent_idx]["tonic_volatility"] = tonic_volatility
+        if metric not in ("win", "share"):
+            raise ValueError(f"metric must be 'win' or 'share', got {metric!r}")
+        if self.node_trajectories is None or self.preferences_idx is None:
+            raise RuntimeError(
+                "Call _run_multi_agent_inference() before vote_outcome_over_time()."
+            )
+        if key is None:
+            key = jax.random.PRNGKey(0)
 
-        # Give observations to the network
-        network.input_data(input_data=self.input_data)
+        base = _extract_env_data_vectorized(self)
+        prefs, cands = base["preferences"], base["candidates"]
+        n_cand = cands["mean"].shape[0]
+        n_steps = self.input_data.shape[0]
+        pidx = self.preferences_idx
 
-        return network.last_attributes, network.node_trajectories
-
-    def _run_multi_agent_inference(self) -> None:
-        """Execute inference for all agents in parallel using vmap."""
-        all_mus, all_pis, all_volatilities = self._gather_agent_data()
-
-        # Partial application to fix the network argument
-        vmap_create_net = Partial(
-            self._run_single_agent_inference, network=self.network
+        # Per-(agent, step, preference) beliefs from the input-node trajectories.
+        bmean = jnp.stack(
+            [self.node_trajectories[i]["expected_mean"] for i in pidx], axis=-1
+        )  # (n_agents, n_steps, n_pref)
+        bprec = jnp.stack(
+            [self.node_trajectories[i]["expected_precision"] for i in pidx], axis=-1
         )
 
-        # Batch execution
-        self.last_attributes, self.node_trajectories = vmap(vmap_create_net)(
-            all_mus, all_pis, all_volatilities
+        columns = []
+        for t in range(n_steps):
+            data_t = {
+                "beliefs": {"mean": bmean[:, t, :], "precision": bprec[:, t, :]},
+                "preferences": prefs,
+                "candidates": cands,
+            }
+            sim_keys = jax.random.split(jax.random.fold_in(key, t), n_simulations)
+            outs = jax.vmap(
+                lambda k: voting_function(data_t, response_function, k, **vote_kwargs)
+            )(sim_keys)
+            if metric == "win":
+                # P(win) per candidate = fraction of elections each one wins.
+                winners = outs["winner"]  # (n_sims,)
+                col = jnp.bincount(winners, length=n_cand) / n_simulations
+            else:  # metric == "share"
+                vps = outs["votes_per_candidate"].astype(jnp.float32)
+                share = vps / jnp.maximum(jnp.sum(vps, axis=1, keepdims=True), 1e-9)
+                col = jnp.mean(share, axis=0)
+            columns.append(col)
+        return jnp.stack(columns, axis=1)  # (n_candidates, n_steps)
+
+    def _gather_agent_data(self):
+        """Return ``(voter_means, voter_precisions, voter_volatilities)``.
+
+        Now reads directly from ``self.population`` instead of iterating
+        over the legacy ``self.voters`` list.
+        """
+        return (
+            self.population.voter_means,
+            self.population.voter_precisions,
+            self.population.voter_volatilities,
         )
-
-        self.preferences_idx = self.network.input_idxs
-
-        # Distribute batched results back to individual agent objects
-        for i, voter in enumerate(self.voters):
-            voter.trajectory = tree_map(lambda x: x[i], self.node_trajectories)
