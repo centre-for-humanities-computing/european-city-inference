@@ -37,5 +37,8 @@ repos:
       - id: check-added-large-files
         args: ['--maxkb=2000']
       - id: check-yaml
+        # mkdocs.yml uses Python-object tags (e.g. !!python/name:...) that the
+        # safe loader cannot construct; --unsafe checks syntax only.
+        args: [--unsafe]
       - id: check-toml
       - id: check-merge-conflict

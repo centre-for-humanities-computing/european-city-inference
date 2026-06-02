@@ -2,7 +2,7 @@ site_name: ECI Documentation
 site_url: https://github.com/centre-for-humanities-computing/european-city-inference
 repo_url: https://github.com/centre-for-humanities-computing/european-city-inference
 repo_name: sylvainestebe/european-city-inference
-edit_uri: edit/main/docs/ 
+edit_uri: edit/main/docs/
 site_description: "Agent-Based Political Election Simulator Documentation"
 site_author: Sylvain Estebe
 
@@ -11,16 +11,16 @@ theme:
   logo: assets/logo.svg
   favicon: assets/logo.svg
   features:
-    - navigation.instant     
-    - navigation.tracking    
-    - navigation.top         
+    - navigation.instant
+    - navigation.tracking
+    - navigation.top
     - navigation.tabs
     - content.code.annotate
     - content.tabs.link
-    - navigation.sections    
-    - toc.integrate          
-    - content.code.copy      
-    - content.code.annotate  
+    - navigation.sections
+    - toc.integrate
+    - content.code.copy
+    - content.code.annotate
   palette:
     - scheme: default
       primary: light blue
@@ -71,7 +71,7 @@ markdown_extensions:
   - pymdownx.details
   - pymdownx.superfences
 
-  - attr_list  
+  - attr_list
   - pymdownx.details
   - pymdownx.emoji:
         emoji_index: !!python/name:material.extensions.emoji.twemoji
@@ -85,7 +85,13 @@ nav:
   - Glossary: glossary.md
   - Tutorials:
       - Decision Making: tutorials/tutorial_1_decision_making.ipynb
-      - Voting System: tutorials/tutorial_2_voting_system.ipynb
-      - Polarization: tutorials/tutorial_3_polarization.ipynb
+      - Voting Systems: tutorials/tutorial_2_voting_system.ipynb
+      - Environment: tutorials/tutorial_3_environment.ipynb
+      - Precision: tutorials/tutorial_4_precision.ipynb
+      - Belief → Vote dynamics: tutorials/tutorial_5_belief_to_vote.ipynb
+  - Extending ECI:
+      - Write your own response function: extending_response_functions.md
   - API Reference: api.md
   - Algorithms: algorithms.md
+  - Contributing: CONTRIBUTING.md
+  - Changelog: CHANGELOG.md
