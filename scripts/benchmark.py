@@ -5,15 +5,14 @@ import time
 import jax
 import pandas as pd
 
+from eci.decision import response_function
 from eci.environment import EnvConfig, Environment
 from eci.utils import _extract_env_data_vectorized
-from eci.voting_system.decisions import response_function
-from eci.voting_system.plurality import _vote_plurality
-from eci.voting_system.quadratic import _vote_quadratic
+from eci.voting import _vote_plurality, _vote_quadratic
 
 # TODO: restore random voting benchmark when `_vote_random_preferences`
 # (or its successor) is reintroduced.
-# from eci.voting_system.random_voting import _vote_random_preferences
+# from eci.voting.random_voting import _vote_random_preferences
 
 
 def measure_batch_time(voting_func, env, data, key, num_simulations, **kwargs):

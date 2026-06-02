@@ -6,18 +6,17 @@ from datetime import datetime
 import jax
 import pandas as pd
 
+from eci.decision import response_function
 from eci.environment import EnvConfig, Environment
 from eci.metrics import batch_compute_metrics
 from eci.plots import plot_belief_trajectory, plot_preference, plot_voting_metrics
 from eci.utils import _extract_env_data_vectorized, get_voter_trajectory_data
-from eci.voting_system.decisions import response_function
-from eci.voting_system.plurality import _vote_plurality
-from eci.voting_system.quadratic import _vote_quadratic
+from eci.voting import _vote_plurality, _vote_quadratic
 
 # TODO: re-enable when strategic / random voting are restored.
-# from eci.voting_system.plurality import strategic_vote
-# from eci.voting_system.quadratic import strategic_quadratic_vote
-# from eci.voting_system.random_voting import _vote_uniform_random
+# from eci.voting.plurality import strategic_vote
+# from eci.voting.quadratic import strategic_quadratic_vote
+# from eci.voting.random_voting import _vote_uniform_random
 
 
 def main():
