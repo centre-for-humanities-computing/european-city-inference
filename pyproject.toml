@@ -41,13 +41,15 @@ dev = [
     "jupyter>=1.1.1",
     "marimo>=0.18.2",
     "watermark",
-    "mkdocs-material",      
-    "mkdocstrings[python]", 
-    "mkdocs-jupyter",       
+    "mkdocs-material",
+    "mkdocstrings[python]",
+    "mkdocs-jupyter",
 ]
 
 [tool.ruff]
 extend-include = ["*.ipynb"]
+# src-layout root, so first-party detection works without the package installed.
+src = ["src"]
 
 [tool.ruff.lint]
 # E/W = pycodestyle, F = pyflakes, I = isort, D = pydocstyle
@@ -60,6 +62,11 @@ ignore = [
 
 [tool.ruff.lint.pydocstyle]
 convention = "numpy"
+
+[tool.ruff.lint.isort]
+# Pin first-party so import grouping is identical locally and in CI
+# (where `eci` is not installed and would otherwise be treated as third-party).
+known-first-party = ["eci"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
