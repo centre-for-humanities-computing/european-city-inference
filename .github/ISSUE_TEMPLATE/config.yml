@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Question or general discussion
+    url: https://github.com/sylvainestebe/european-city-inference/discussions
+    about: Use Discussions for usage questions, design debates, or anything that is not a bug or a feature request.
+  - name: Security report
+    url: https://github.com/sylvainestebe/european-city-inference/security/advisories/new
+    about: For potential security issues, please use a private security advisory rather than a public issue.

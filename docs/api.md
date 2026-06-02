@@ -25,19 +25,29 @@ Auto-generated reference for the public API of `eci`. See the
 
 ### Plurality
 
-::: eci.voting_system.plurality
+::: eci.voting.plurality
 
 ### Quadratic
 
-::: eci.voting_system.quadratic
+::: eci.voting.quadratic
 
 ### Decision helpers
 
-Score functions, KL gap helpers and `response_function` variants used by both
-voting rules. The legacy `eci.voting_system.beliefs` module has been merged
-into this one — `_get_pref_belief_gap` was renamed `_get_belief_preference_gap`.
+KL gap helpers, candidate-utility computation and `response_function`
+variants used by both voting rules, living in `eci.decision`.
+(`_get_pref_belief_gap` was renamed `_get_belief_preference_gap`.)
 
-::: eci.voting_system.decisions
+::: eci.decision.utilities
+
+::: eci.decision.response
+
+### Scoring
+
+Pluggable scoring strategies that turn KL gaps into candidate utilities.
+See [Choosing a scoring function](algorithms.md#choosing-a-scoring-function)
+for the math and a side-by-side comparison.
+
+::: eci.decision.scoring
 
 ## Metrics
 
@@ -57,3 +67,38 @@ Observation generation, KL divergence and trajectory accessors.
 ## Plots
 
 ::: eci.plots
+
+## Data layer (v0.2 skeleton)
+
+The boundary between empirical voting-experiment data and ECI's internal
+data model. See [Write your own response function](extending_response_functions.md)
+for the extension contract on the voting side.
+
+### Schemas
+
+::: eci.data.schemas
+
+### Loaders
+
+::: eci.data.loaders
+
+### Transformers
+
+::: eci.data.transformers
+
+## Fit layer (v0.2 skeleton)
+
+Bayesian calibration of ECI parameters from observed votes. Stubbed until
+v0.2 — the skeleton documents the intended composition.
+
+### Priors
+
+::: eci.fit.priors
+
+### Models
+
+::: eci.fit.models
+
+### Diagnostics
+
+::: eci.fit.diagnostics
