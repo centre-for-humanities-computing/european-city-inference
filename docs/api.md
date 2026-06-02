@@ -67,38 +67,3 @@ Observation generation, KL divergence and trajectory accessors.
 ## Plots
 
 ::: eci.plots
-
-## Data layer (v0.2 skeleton)
-
-The boundary between empirical voting-experiment data and ECI's internal
-data model. See [Write your own response function](extending_response_functions.md)
-for the extension contract on the voting side.
-
-### Schemas
-
-::: eci.data.schemas
-
-### Loaders
-
-::: eci.data.loaders
-
-### Transformers
-
-::: eci.data.transformers
-
-## Fit layer (v0.2 skeleton)
-
-Bayesian calibration of ECI parameters from observed votes. Stubbed until
-v0.2 — the skeleton documents the intended composition.
-
-### Priors
-
-::: eci.fit.priors
-
-### Models
-
-::: eci.fit.models
-
-### Diagnostics
-
-::: eci.fit.diagnostics

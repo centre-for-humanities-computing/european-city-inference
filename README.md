@@ -109,9 +109,7 @@ src/eci/
 ├── utils.py             # KL divergence + env-extraction helpers
 ├── decision/            # response functions + scoring + utilities
 ├── voting/              # voting rules (plurality, quadratic)
-├── plots/               # belief / preference / voting plot helpers
-├── data/                # (v0.2 skeleton) empirical-data layer
-└── fit/                 # (v0.2 skeleton) Bayesian calibration layer
+└── plots/               # belief / preference / voting plot helpers
 notebooks/               # six didactic tutorials + poster figures
 tests/                   # pytest suite (mirrors src/eci/)
 docs/                    # MkDocs Material site
