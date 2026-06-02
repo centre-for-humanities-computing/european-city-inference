@@ -1,7 +1,6 @@
 """Smoke tests for the eci.fit skeleton."""
 
 import pytest
-
 from eci.fit import diagnostics, models, priors
 
 

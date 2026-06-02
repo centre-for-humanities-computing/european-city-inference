@@ -6,7 +6,6 @@ that the package layout is importable and the stubs raise
 """
 
 import pytest
-
 from eci.data import loaders, schemas, transformers
 from eci.data.schemas import (
     BallotCast,
