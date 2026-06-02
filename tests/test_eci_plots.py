@@ -81,7 +81,7 @@ class TestPlots:
         # Execution
         fig, ax_main, ax_density = plot_belief_trajectory(
             expected_mean=mean,
-            precisions=prec,
+            expected_precision=prec,
             observations=obs,
             preference_params=params,
             title_suffix="Test",

@@ -39,20 +39,24 @@ class ScoringFn(Protocol):
 
 def score_normalized(belief_gap: ArrayLike, pref_candidate_gap: ArrayLike) -> ArrayLike:
     r"""Score candidates as a fraction of current dissatisfaction (normalized)."""
+    belief_gap = jnp.asarray(belief_gap)
     safe = belief_gap[:, jnp.newaxis] + _EPS
     return (safe - pref_candidate_gap) / safe
 
 
 def score_absolute(belief_gap: ArrayLike, pref_candidate_gap: ArrayLike) -> ArrayLike:
     r"""Absolute score — raw reduction of dissatisfaction."""
+    belief_gap = jnp.asarray(belief_gap)
     return belief_gap[:, jnp.newaxis] - pref_candidate_gap
 
 
 def score_inverted(belief_gap: ArrayLike, pref_candidate_gap: ArrayLike) -> ArrayLike:
     r"""Inverted score — distance penalty (sign-flipped absolute)."""
+    belief_gap = jnp.asarray(belief_gap)
     return pref_candidate_gap - belief_gap[:, jnp.newaxis]
 
 
 def score_product(belief_gap: ArrayLike, pref_candidate_gap: ArrayLike) -> ArrayLike:
     r"""Product score — dissatisfaction-weighted candidate distance."""
+    belief_gap = jnp.asarray(belief_gap)
     return -belief_gap[:, jnp.newaxis] * pref_candidate_gap

@@ -22,10 +22,10 @@ def _get_belief_preference_gap(
 
 
 def _get_pref_candidate_gap(
-    cand_mean: ArrayLike,
-    cand_precision: ArrayLike,
-    pref_mean: ArrayLike,
-    pref_precision: ArrayLike,
+    cand_mean: jnp.ndarray,
+    cand_precision: jnp.ndarray,
+    pref_mean: jnp.ndarray,
+    pref_precision: jnp.ndarray,
 ) -> jnp.ndarray:
     """Compute KL(candidate || preference) summed across dims → (n_agents, n_cand)."""
     gap_per_dim = kl_divergence(
@@ -38,12 +38,12 @@ def _get_pref_candidate_gap(
 
 
 def _get_expected_future_belief_gap(
-    beliefs_mean: ArrayLike,
-    beliefs_precision: ArrayLike,
-    pref_mean: ArrayLike,
-    pref_precision: ArrayLike,
-    cand_mean: ArrayLike,
-    cand_precision: ArrayLike,
+    beliefs_mean: jnp.ndarray,
+    beliefs_precision: jnp.ndarray,
+    pref_mean: jnp.ndarray,
+    pref_precision: jnp.ndarray,
+    cand_mean: jnp.ndarray,
+    cand_precision: jnp.ndarray,
 ) -> jnp.ndarray:
     """Compute KL(Future_Belief || Preferences) using precision-weighted combination."""
     # broadcasting: (n_agents, n_candidates, n_dims)

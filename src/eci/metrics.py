@@ -2,10 +2,9 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 import pandas as pd
-from jax.typing import ArrayLike
 
 
-def _winner_satisfaction(candidate_preferences: ArrayLike, winner: int) -> float:
+def _winner_satisfaction(candidate_preferences: jax.Array, winner: int) -> jax.Array:
     """Compute the winner satisfaction metric.
 
     Parameters
@@ -24,8 +23,8 @@ def _winner_satisfaction(candidate_preferences: ArrayLike, winner: int) -> float
 
 
 def _vote_efficiency(
-    candidate_preferences: np.ndarray, votes_matrix: np.ndarray
-) -> float:
+    candidate_preferences: jax.Array, votes_matrix: jax.Array
+) -> jax.Array:
     """Compute the vote efficiency metric.
 
     Parameters
@@ -56,7 +55,7 @@ def _vote_efficiency(
 
 
 def compute_metrics(
-    candidate_preferences: ArrayLike, votes_matrix: ArrayLike, winner: int
+    candidate_preferences: jax.Array, votes_matrix: jax.Array, winner: int
 ) -> dict:
     """Compute the metric for a single simulation.
 
