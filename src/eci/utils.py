@@ -1,12 +1,5 @@
-from typing import Literal, Optional, Tuple
-
-import jax
 import jax.numpy as jnp
-import numpy as np
 from jax.typing import ArrayLike
-
-Params = Tuple[float, float]
-PhaseParams = Tuple[Params, Params]
 
 
 def kl_divergence(
@@ -15,182 +8,34 @@ def kl_divergence(
     mean_pref: ArrayLike,
     precision_pref: ArrayLike,
 ) -> ArrayLike:
-    """Calculate the KL divergence between two Gaussian distributions.
+    r"""KL divergence between two univariate Gaussians, given by precisions.
 
     Parameters
     ----------
-    mean_pref :
-        Mean of the preferred distribution.
-    precision_pref :
-        Precision of the preferred distribution.
-    mean_belief :
-        Mean of the belief distribution.
-    precision_belief :
-        Precision of the belief distribution.
+    mean_belief, precision_belief :
+        Parameters of the belief distribution :math:`q`.
+    mean_pref, precision_pref :
+        Parameters of the preference distribution :math:`p`.
 
     Returns
     -------
-    The KL divergence between the two distributions.
+    Element-wise KL :math:`\mathrm{KL}(q \| p)`. Broadcasting follows
+    NumPy / JAX rules.
     """
-    # Conversion to JAX arrays for broadcasting
     mean_belief = jnp.asarray(mean_belief)
     precision_belief = jnp.asarray(precision_belief)
     mean_pref = jnp.asarray(mean_pref)
     precision_pref = jnp.asarray(precision_pref)
-
-    # Correct KL divergence formula using precisions
-    kl = 0.5 * (
+    return 0.5 * (
         jnp.log(precision_belief / precision_pref)
         + (precision_pref / precision_belief)
         + (precision_pref * (mean_belief - mean_pref) ** 2)
         - 1.0
     )
-    return kl
-
-
-def _get_parameter_trajectory(
-    n_steps: int,
-    s_time: int,
-    r_time: int,
-    pattern: Optional[str],
-    trend_shape: str,
-    phase_params: PhaseParams,
-) -> Tuple[np.ndarray, np.ndarray]:
-    """
-    Calculate the alpha and beta parameters for generate observations.
-
-    Parameters
-    ----------
-    n_steps :
-        Total number of time steps.
-    s_time :
-        Time step when the shock begins.
-    r_time :
-        Time step when recovery begins or ends.
-    pattern :
-        The pattern of the shock.
-    trend_shape :
-        The shape of the transition for 'trend' patterns.
-    phase_params :
-        Parameters for the Beta distribution (alpha, beta).
-
-    Returns
-    -------
-    alpha_t :
-        Array of alpha parameters for each time step.
-    beta_t :
-        Array of beta parameters for each time step.
-    """
-    (a1, b1), (a2, b2) = phase_params
-
-    # Initialize with normal phase parameters
-    alpha_t = np.full(n_steps, a1, dtype=float)
-    beta_t = np.full(n_steps, b1, dtype=float)
-
-    # Apply shock pattern to parameters over time
-    if pattern in [None, "phase"]:
-        alpha_t[s_time:r_time] = a2
-        beta_t[s_time:r_time] = b2
-    elif pattern == "sudden":
-        alpha_t[s_time:] = a2
-        beta_t[s_time:] = b2
-    elif pattern == "trend":
-        t = np.arange(n_steps)
-        mask_degrade = (t >= s_time) & (t < r_time)
-        mask_recover = t >= r_time
-
-        # Degradation phase
-        if np.any(mask_degrade):
-            prog = (t[mask_degrade] - s_time) / (r_time - s_time)
-            w = prog if trend_shape == "linear" else prog**2
-            alpha_t[mask_degrade] = a1 * (1 - w) + a2 * w
-            beta_t[mask_degrade] = b1 * (1 - w) + b2 * w
-        # Recovery phase
-        if np.any(mask_recover):
-            prog = (t[mask_recover] - r_time) / (n_steps - r_time)
-            w = (1 - prog) if trend_shape == "linear" else (1 - prog) ** 2
-            alpha_t[mask_recover] = a1 * (1 - w) + a2 * w
-            beta_t[mask_recover] = b1 * (1 - w) + b2 * w
-
-    return alpha_t, beta_t
-
-
-def generate_observations(
-    n_nodes: int,
-    n_steps: int,
-    scenario: int = 1,
-    shock_pattern: Optional[Literal["phase", "sudden", "trend"]] = None,
-    shock_time: Optional[int] = None,
-    recovery_time: Optional[int] = None,
-    trend_shape: Literal["linear", "quadratic"] = "linear",
-    dispersion: float = 1.0,
-    phase_params: PhaseParams = ((15.0, 1.0), (2.0, 2.0)),
-    seed: Optional[int] = None,
-) -> np.ndarray:
-    """
-    Generate synthetic observations for a set of nodes over time.
-
-    Parameters
-    ----------
-    n_nodes :
-        The number of nodes to generate data for.
-    n_steps :
-        The number of time steps (observations) per node.
-    scenario :
-        The scenario type.
-    shock_pattern :
-        The pattern of the shock.
-    shock_time :
-        Time step when the shock begins.
-    recovery_time :
-        Time step when recovery begins or ends.
-    trend_shape :
-        The shape of the transition for 'trend' patterns.
-    dispersion :
-        Multiplicative factor for the Gaussian noise added to observations.
-    phase_params :
-        Parameters for the Beta distribution (alpha, beta).
-    seed :
-        Seed for the random number generator to ensure reproducibility.
-
-    Returns
-    -------
-    Array containing the generated observations.
-    """
-    if scenario not in [1, 2]:
-        raise ValueError("Scenario must be 1 or 2")
-    if scenario == 2 and shock_pattern not in [None, "phase", "sudden", "trend"]:
-        raise ValueError(f"Invalid shock_pattern: {shock_pattern}")
-    rng = np.random.default_rng(seed)
-
-    # time logic
-    s_time = shock_time if shock_time is not None else n_steps // 3
-    r_time = recovery_time if recovery_time is not None else 2 * n_steps // 3
-
-    # clipping
-    s_time = np.clip(s_time, 0, n_steps)
-    r_time = np.clip(r_time, s_time, n_steps)
-
-    # Scenario 1 is just Scenario 2 with no shock pattern
-    pattern = shock_pattern if scenario == 2 else None
-
-    alpha_t, beta_t = _get_parameter_trajectory(
-        n_steps, s_time, r_time, pattern, trend_shape, phase_params
-    )
-
-    # generate observations
-    obs = rng.beta(alpha_t[:, None], beta_t[:, None], size=(n_steps, n_nodes))
-
-    if dispersion > 0:
-        noise = rng.normal(0, 0.05 * dispersion, size=(n_steps, n_nodes))
-        obs += noise
-
-    return np.clip(obs, 0, 1)
 
 
 def get_voter_trajectory_data(env, voter_id: int, pref_idx: int = 0):
-    """
-    Retrieve specific arrays for a single voter's belief trajectory.
+    """Retrieve arrays for plotting one voter's belief trajectory.
 
     Parameters
     ----------
@@ -199,20 +44,12 @@ def get_voter_trajectory_data(env, voter_id: int, pref_idx: int = 0):
     voter_id :
         The ID of the voter to retrieve data for.
     pref_idx :
-        The index of the preference dimension to extract.
-
-    Returns
-    -------
-    A dictionary containing the expected mean, precision, observations, and
-    preference parameters for the specified voter and preference index.
+        Preference-dimension index to extract.
     """
-    # Find the voter in the environment
     voter = next(v for v in env.voters if v.id == voter_id)
-
-    # Extract the relevant data from the voter's trajectory and preferences
     return {
-        "expected_mean": voter.trajectory[1]["expected_mean"],
-        "precisions": voter.trajectory[1]["precision"],
+        "expected_mean": voter.trajectory[0]["expected_mean"],
+        "expected_precision": voter.trajectory[0]["expected_precision"],
         "observations": env.input_data[:, pref_idx],
         "preference_params": (
             voter.preferences["mean"][pref_idx],
@@ -223,56 +60,29 @@ def get_voter_trajectory_data(env, voter_id: int, pref_idx: int = 0):
 
 
 def _extract_env_data_vectorized(env):
+    """Extract per-agent belief / preference / candidate arrays from an env.
+
+    Returns the canonical ``data`` dict that every voting rule and
+    response function consumes:
+
+    ``{"beliefs": {"mean", "precision"},
+       "preferences": {"mean", "precision"},
+       "candidates":  {"mean", "precision"}}``
     """
-    Extract and vectorize belief, preference, and policy data from the environment.
-
-    Parameters
-    ----------
-    env :
-        The simulation environment containing agents and candidates.
-
-    Returns
-    -------
-    data : dict
-        A dictionary containing JAX arrays:
-
-    """
-    # Matrice (agent, preference)
     pref_idx_list = env.preferences_idx
-
-    # Extract Candidate Data
     policy_means = jnp.stack([c.policy["mean"].ravel() for c in env.candidates])
     policy_precs = jnp.stack([c.policy["precision"].ravel() for c in env.candidates])
-
-    # Extract Voter Beliefs
     means_belief = jnp.stack(
         [env.last_attributes[i]["expected_mean"] for i in pref_idx_list], axis=-1
     )
     precs_belief = jnp.stack(
         [env.last_attributes[i]["expected_precision"] for i in pref_idx_list], axis=-1
     )
-
-    # Extract Voter Preferences
     p_idx_jax = jnp.array(pref_idx_list)
     agent_pref_means = env.last_attributes[-1]["preferences"]["mean"][:, p_idx_jax]
     agent_pref_precs = env.last_attributes[-1]["preferences"]["precision"][:, p_idx_jax]
-
     return {
         "beliefs": {"mean": means_belief, "precision": precs_belief},
         "preferences": {"mean": agent_pref_means, "precision": agent_pref_precs},
         "candidates": {"mean": policy_means, "precision": policy_precs},
     }
-
-
-def _find_top_k_winners(
-    votes_array: jnp.ndarray, num_candidates: int, k: int
-) -> jnp.ndarray:
-    """Return the indices of the k candidates with the most votes."""
-    counts = jnp.bincount(votes_array.astype(jnp.int32), length=num_candidates)
-    _, winners = jax.lax.top_k(counts, k=k)
-    return winners
-
-
-def _find_winner(votes_array: jnp.ndarray, num_candidates: int) -> jnp.ndarray:
-    """Return the index of the single candidate with the most votes."""
-    return _find_top_k_winners(votes_array, num_candidates, k=1)[0]
