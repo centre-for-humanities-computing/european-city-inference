@@ -2,17 +2,43 @@ exclude: |
     (?x)^(
         docs/.*|
     )$
+
 repos:
--   repo: https://github.com/astral-sh/ruff-pre-commit
+  - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.13.3
     hooks:
-    -   id: ruff
+      - id: ruff
         args: [--fix]
-    -   id: ruff-format
+      - id: ruff-format
 
--   repo: https://github.com/pre-commit/mirrors-mypy
+  - repo: https://github.com/pre-commit/mirrors-mypy
     rev: 'v1.18.2'
     hooks:
-    -   id: mypy
+      - id: mypy
         files: src/
         args: [--ignore-missing-imports, --warn-unused-ignores]
+
+  # Strip notebook outputs before commit so diffs stay reviewable.
+  # CI still re-executes notebooks end-to-end (see .github/workflows/ci.yml).
+  - repo: https://github.com/kynan/nbstripout
+    rev: 0.7.1
+    hooks:
+      - id: nbstripout
+
+  # Generic hygiene: trim trailing whitespace, end-of-file newline, fix CRLF,
+  # and catch large files that should not be committed.
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: mixed-line-ending
+        args: [--fix=lf]
+      - id: check-added-large-files
+        args: ['--maxkb=2000']
+      - id: check-yaml
+        # mkdocs.yml uses Python-object tags (e.g. !!python/name:...) that the
+        # safe loader cannot construct; --unsafe checks syntax only.
+        args: [--unsafe]
+      - id: check-toml
+      - id: check-merge-conflict

@@ -1,13 +1,10 @@
-from typing import Any, Dict
-
 import jax
 import jax.numpy as jnp
 import numpy as np
 import pandas as pd
-from jax.typing import ArrayLike
 
 
-def _winner_satisfaction(candidate_preferences: ArrayLike, winner: int) -> float:
+def _winner_satisfaction(candidate_preferences: jax.Array, winner: int) -> jax.Array:
     """Compute the winner satisfaction metric.
 
     Parameters
@@ -26,8 +23,8 @@ def _winner_satisfaction(candidate_preferences: ArrayLike, winner: int) -> float
 
 
 def _vote_efficiency(
-    candidate_preferences: np.ndarray, votes_matrix: np.ndarray
-) -> float:
+    candidate_preferences: jax.Array, votes_matrix: jax.Array
+) -> jax.Array:
     """Compute the vote efficiency metric.
 
     Parameters
@@ -40,8 +37,9 @@ def _vote_efficiency(
     Returns
     -------
     vote_efficiency : jnp.ndarray
-        average preference gap for the candidates chosen by voters,
-        weighted by the number of votes they received.
+        Summed over agents of each agent's vote-weighted mean preference
+        gap (per agent: total vote-weighted gap divided by that agent's
+        total votes; agents who cast no votes contribute 0).
 
     """
     # Weighted sum of preferences
@@ -57,7 +55,7 @@ def _vote_efficiency(
 
 
 def compute_metrics(
-    candidate_preferences: ArrayLike, votes_matrix: ArrayLike, winner: int
+    candidate_preferences: jax.Array, votes_matrix: jax.Array, winner: int
 ) -> dict:
     """Compute the metric for a single simulation.
 
@@ -87,51 +85,110 @@ def compute_metrics(
     }
 
 
-def batch_compute_metrics(sim_results: Dict[int, Dict[str, Any]]) -> pd.DataFrame:
-    """Compute metrics for all simulations.
+def _extract_votes_matrix(sim_results, n_cand):
+    """Pull a vote matrix from sim_results."""
+    keys = list(sim_results.keys())
+    first = sim_results[keys[0]]
+    if "votes_matrix" in first:
+        return jnp.stack([sim_results[k]["votes_matrix"] for k in keys])
+    # ---- legacy fallback ------------------------------------------------
+    if "qv_votes_matrix" in first:
+        return jnp.stack([sim_results[k]["qv_votes_matrix"] for k in keys])
+    votes_idx = jnp.stack([sim_results[k]["votes"] for k in keys])
+    return jax.nn.one_hot(votes_idx, num_classes=n_cand)
+
+
+def _extract_preference_gap(sim_results):
+    """Pull preference gap, falling back to candidate_utilities."""
+    keys = list(sim_results.keys())
+    first = sim_results[keys[0]]
+    pref_key = (
+        "pref_candidate_gap" if "pref_candidate_gap" in first else "candidate_utilities"
+    )
+    return jnp.stack([sim_results[k][pref_key] for k in keys])
+
+
+def batch_compute_metrics(sim_results):
+    """Compute per-simulation metrics across a batch of simulations.
 
     Parameters
     ----------
     sim_results : dict
-        simulations results.
+        Maps simulation id to a result dict (vote matrix, ``winner``,
+        ``softmax`` and preference-gap keys) as returned by the voting rules.
 
     Returns
     -------
-    df : jnp.ndarray
-
+    pandas.DataFrame
+        One row per simulation with ``winner_satisfaction``,
+        ``vote_efficiency`` and a ``simulation_id`` column.
     """
-    # Data Extraction
     keys = list(sim_results.keys())
-    first_res = sim_results[keys[0]]
-
-    # Number of candidates
-    n_cand = first_res["softmax_probs_round_1"].shape[1]
-
-    # Get preferences
-    pref_key = "pref_candidate_gap"
-    if pref_key not in first_res:
-        pref_key = "candidate_preferences"
-    pref_candidate_gap = jnp.stack([sim_results[k][pref_key] for k in keys])
-
-    # Get winners
-    winners = jnp.array([sim_results[k]["final_winner"] for k in keys], dtype=int)
-
-    if "qv_votes_matrix" in first_res:
-        # Quadratic Voting Case
-        votes_matrix = jnp.stack([sim_results[k]["qv_votes_matrix"] for k in keys])
-
-    else:
-        # Plurality Voting Case
-        votes_indices = jnp.stack([sim_results[k]["vote_round_1"] for k in keys])
-
-        # Convert to one-hot encoding
-        votes_matrix = jax.nn.one_hot(votes_indices, num_classes=n_cand)
-
-    batch_fn = jax.vmap(compute_metrics, in_axes=(0, 0, 0))
-    metrics_batch = batch_fn(pref_candidate_gap, votes_matrix, winners)
-
-    # Create DataFrame
-    df = pd.DataFrame(metrics_batch)
+    n_cand = sim_results[keys[0]]["softmax"].shape[1]
+    pref_gap = _extract_preference_gap(sim_results)
+    votes_matrix = _extract_votes_matrix(sim_results, n_cand)
+    winners = jnp.array([sim_results[k]["winner"] for k in keys], dtype=int)
+    metrics = jax.vmap(compute_metrics, in_axes=(0, 0, 0))(
+        pref_gap, votes_matrix, winners
+    )
+    df = pd.DataFrame(metrics)
     df["simulation_id"] = keys
-
     return df
+
+
+def winner_frequencies(winners, n_candidates):
+    """Empirical P(win) per candidate with the standard error over N sims.
+
+    Parameters
+    ----------
+    winners : array-like, shape (n_sim,)
+        Winning candidate index for each simulation.
+    n_candidates : int
+
+    Returns
+    -------
+    p : np.ndarray, shape (n_candidates,)
+        Empirical win frequency per candidate.
+    se : np.ndarray, shape (n_candidates,)
+        Standard error of each frequency, ``sqrt(p(1 - p) / N)`` (the
+        binomial-proportion SE over the N simulations — no bootstrap).
+    """
+    winners = np.asarray(winners)
+    n = winners.shape[0]
+    counts = np.bincount(winners.astype(int), minlength=n_candidates)
+    p = counts / n
+    se = np.sqrt(p * (1.0 - p) / n)
+    return p, se
+
+
+def uniform_baseline_test(winners, n_candidates):
+    """Chi-square goodness-of-fit of the winner distribution against uniform."""
+    from scipy.stats import chisquare
+
+    counts = np.bincount(np.asarray(winners).astype(int), minlength=n_candidates)
+    expected = np.full(n_candidates, counts.sum() / n_candidates)
+    chi2, p_value = chisquare(counts, f_exp=expected)
+    return float(chi2), float(p_value)
+
+
+def winner_distribution_distance(winners_a, winners_b, n_candidates):
+    """Total-variation distance between two systems' winner distributions."""
+    pa = np.bincount(np.asarray(winners_a).astype(int), minlength=n_candidates) / len(
+        winners_a
+    )
+    pb = np.bincount(np.asarray(winners_b).astype(int), minlength=n_candidates) / len(
+        winners_b
+    )
+    return 0.5 * float(np.sum(np.abs(pa - pb)))
+
+
+def winner_agreement(winners_a, winners_b):
+    """Fraction of simulations where both systems elect the **same** winner."""
+    a = np.asarray(winners_a).astype(int)
+    b = np.asarray(winners_b).astype(int)
+    if a.shape != b.shape:
+        raise ValueError(
+            "winner arrays must be aligned per-simulation "
+            f"(got shapes {a.shape} and {b.shape})"
+        )
+    return float(np.mean(a == b))

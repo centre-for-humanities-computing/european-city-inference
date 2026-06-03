@@ -4,10 +4,9 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
+from eci.observations import _get_parameter_trajectory, generate_observations
 from eci.utils import (
     _extract_env_data_vectorized,
-    _get_parameter_trajectory,
-    generate_observations,
     get_voter_trajectory_data,
     kl_divergence,
 )
@@ -118,12 +117,19 @@ class TestDataExtraction:
     """Tests for environment data extraction functions."""
 
     def test_get_voter_trajectory_data(self):
-        """Verify data retrieval for a specific voter."""
+        """Verify data retrieval for a specific voter.
+
+        `get_voter_trajectory_data` reads ``voter.trajectory[0]`` and expects
+        each entry to carry ``expected_mean`` / ``expected_precision``.
+        """
         # Mock Environment and Voter
         env = MagicMock()
         voter = MagicMock()
         voter.id = 1
-        voter.trajectory = [{"expected_mean": [0.5], "precision": [1.0]}]
+        voter.trajectory = [
+            {"expected_mean": [0.0], "expected_precision": [1.0]},  # read
+            {"expected_mean": [0.5], "expected_precision": [1.0]},
+        ]
         voter.preferences = {"mean": [0.9], "precision": [2.0]}
 
         env.voters = [voter]
@@ -136,6 +142,8 @@ class TestDataExtraction:
         assert "observations" in data
         assert data["title_suffix"] == "for Voter 1"
         assert data["preference_params"] == (0.9, 2.0)
+        # Confirms we read trajectory[0].
+        assert data["expected_mean"] == [0.0]
 
     def test_extract_env_data_vectorized(self):
         """Test extraction of complex nested structures into JAX arrays."""

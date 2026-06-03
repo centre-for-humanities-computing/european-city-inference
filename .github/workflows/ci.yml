@@ -2,61 +2,72 @@ name: CI
 
 on:
   push:
-    branches: [ "main" ]
+    branches: ["main"]
   pull_request:
-    branches: [ "main" ]
+    branches: ["main"]
+
+# Cancel previous runs on the same branch when a new commit arrives.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   tests:
-    name: Run Tests & Lint
+    name: Run Tests, Lint, Type-check & Notebooks
     runs-on: ubuntu-latest
-    
+
     steps:
       - uses: actions/checkout@v4
 
-      # install uv
+      # ---- toolchain -----------------------------------------------------
       - name: Install uv
-        uses: astral-sh/setup-uv@v1
+        uses: astral-sh/setup-uv@v3
         with:
           version: "latest"
           enable-cache: true
 
-      # install python
       - name: Set up Python
         run: uv python install 3.12
 
-      # dependancies
       - name: Install dependencies
         run: uv sync --all-extras --dev
 
-      - name: Deploy to GitHub Pages
-        run: uv run mkdocs gh-deploy --force
-
-      # format check
-      - name: Lint with Ruff
+      # ---- code quality --------------------------------------------------
+      - name: Lint with Ruff (format + check)
         run: |
           uv run ruff format --check .
           uv run ruff check .
 
+      - name: Type-check with mypy
+        run: uv run mypy src/ --ignore-missing-imports --warn-unused-ignores
+
+      # ---- system deps for tests / notebooks -----------------------------
       - name: Install Graphviz
         run: sudo apt-get update && sudo apt-get install -y graphviz
-        
-      # unit test
+
+      # ---- unit tests + coverage -----------------------------------------
       - name: Run Tests with pytest
         run: uv run pytest tests --cov=src --cov-report=html --cov-report=term --cov-report=xml
 
-      # notebook test
-      - name: Test Notebooks execution
-        run: uv run python -m nbconvert notebooks/*.ipynb --to notebook --execute --inplace
+      # ---- notebook execution (acts as integration tests) ----------------
+      # Per-cell timeout bumped to 600 s so the heavier notebooks
+      # (e.g. poster_figures.ipynb) have room to finish.
+      - name: Execute Notebooks
+        run: |
+          uv run python -m nbconvert \
+            --to notebook \
+            --execute \
+            --inplace \
+            --ExecutePreprocessor.timeout=600 \
+            notebooks/*.ipynb
 
-      # save report
+      # ---- coverage artifacts & summary ----------------------------------
       - name: Upload Coverage Report
         uses: actions/upload-artifact@v4
         with:
           name: coverage-report
           path: htmlcov/
 
-      # summary
       - name: Coverage Summary
         if: always()
         run: |
