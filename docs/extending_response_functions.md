@@ -132,12 +132,6 @@ further random operations without reusing the same draw.
 
 ## Reference
 
-::: eci.decision.response.ResponseFunction
-    options:
-      show_root_heading: false
-
-::: eci.decision.response.response_function
-
-::: eci.decision.response.response_function_logpdf
-
-::: eci.decision.response.response_function_pref
+See the [Decision helpers](api.md#decision-helpers) section of the API reference
+for the full `ResponseFunction` protocol and the built-in response functions
+(`response_function`, `response_function_logpdf`, `response_function_pref`, …).
