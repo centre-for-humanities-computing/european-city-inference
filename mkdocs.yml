@@ -1,63 +1,89 @@
 site_name: ECI Documentation
-site_url: https://github.com/centre-for-humanities-computing/european-city-inference
+site_url: https://centre-for-humanities-computing.github.io/european-city-inference/
 repo_url: https://github.com/centre-for-humanities-computing/european-city-inference
-repo_name: sylvainestebe/european-city-inference
+repo_name: centre-for-humanities-computing/european-city-inference
 edit_uri: edit/main/docs/
-site_description: "Agent-Based Political Election Simulator Documentation"
+site_description: "Agent-based political election simulator with hierarchical Bayesian voters"
 site_author: Sylvain Estebe
 
 theme:
   name: material
   logo: assets/logo.svg
   favicon: assets/logo.svg
+  icon:
+    repo: fontawesome/brands/github
   features:
     - navigation.instant
+    - navigation.instant.progress
     - navigation.tracking
-    - navigation.top
     - navigation.tabs
-    - content.code.annotate
-    - content.tabs.link
+    - navigation.tabs.sticky
     - navigation.sections
-    - toc.integrate
+    - navigation.indexes
+    - navigation.top
+    - navigation.footer
+    - toc.follow
+    - search.suggest
+    - search.highlight
+    - search.share
     - content.code.copy
     - content.code.annotate
+    - content.tabs.link
+    - content.action.edit
+    - content.action.view
+    - content.tooltips
   palette:
-    - scheme: default
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
       primary: light blue
       accent: amber
       toggle:
         icon: material/weather-sunny
         name: Switch to dark mode
-    - scheme: slate
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
       primary: indigo
       accent: amber
       toggle:
         icon: material/weather-night
         name: Switch to light mode
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/centre-for-humanities-computing/european-city-inference
+
 plugins:
   - search
   - mkdocs-jupyter:
       include_source: True
       ignore_h1_titles: True
   - mkdocstrings:
-        handlers:
-          python:
-            paths: [src]
-            options:
-              docstring_style: numpy     # CRUCIAL : Transforme le texte en tableaux structurés
-              show_source: true          # Affiche un bouton pour voir le code source
-              show_root_heading: true    # Affiche le nom de la classe en gros titre
-              show_category_heading: true # Sépare "Attributes", "Methods", "Classes"
-              show_signature_annotations: true # Affiche les types (int, float, etc.)
-              separate_signature: true   # Met les arguments sur des lignes séparées (plus lisible)
-              unwrap_annotated: true     # Nettoie les types complexes
-              merge_init_into_class: true # Affiche les arguments de __init__ directement sous la classe
+      handlers:
+        python:
+          paths: [src]
+          options:
+            docstring_style: numpy      # Transforme le texte en tableaux structurés
+            show_source: true           # Bouton "voir le code source"
+            show_root_heading: true     # Nom de la classe en gros titre
+            show_category_heading: true # Sépare "Attributes", "Methods", "Classes"
+            show_signature_annotations: true
+            separate_signature: true
+            unwrap_annotated: true
+            merge_init_into_class: true
+
 markdown_extensions:
+  - abbr
+  - admonition
+  - attr_list
+  - md_in_html
+  - footnotes
   - pymdownx.highlight:
       anchor_linenums: true
-  - md_in_html
+      pygments_lang_class: true
   - pymdownx.inlinehilite
   - pymdownx.snippets
+  - pymdownx.details
   - pymdownx.superfences:
       custom_fences:
         - name: mermaid
@@ -67,19 +93,14 @@ markdown_extensions:
       alternate_style: true
   - pymdownx.arithmatex:
       generic: true
-  - admonition
-  - pymdownx.details
-  - pymdownx.superfences
-
-  - attr_list
-  - pymdownx.details
   - pymdownx.emoji:
-        emoji_index: !!python/name:material.extensions.emoji.twemoji
-        emoji_generator: !!python/name:material.extensions.emoji.to_svg
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+
 extra_javascript:
-  - https://polyfill.io/v3/polyfill.min.js?features=es6
-  - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
   - javascripts/mathjax.js
+  - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
+
 nav:
   - Home: index.md
   - Glossary: glossary.md
@@ -87,8 +108,6 @@ nav:
       - Decision Making: tutorials/tutorial_1_decision_making.ipynb
       - Voting Systems: tutorials/tutorial_2_voting_system.ipynb
       - Environment: tutorials/tutorial_3_environment.ipynb
-      - Precision: tutorials/tutorial_4_precision.ipynb
-      - Belief → Vote dynamics: tutorials/tutorial_5_belief_to_vote.ipynb
   - Extending ECI:
       - Write your own response function: extending_response_functions.md
   - API Reference: api.md

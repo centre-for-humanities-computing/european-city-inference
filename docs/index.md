@@ -38,8 +38,6 @@ This documentation is designed to help you navigate the project components:
     * [**Decision Making**](tutorials/tutorial_1_decision_making.ipynb): How a single voter weighs candidates against their beliefs.
     * [**Voting Systems**](tutorials/tutorial_2_voting_system.ipynb): Compare Plurality vs Quadratic voting — math and algorithm explained.
     * [**Environment**](tutorials/tutorial_3_environment.ipynb): World dynamics, volatility, observation noise.
-    * [**Precision**](tutorials/tutorial_4_precision.ipynb): How belief precision shapes vote decisiveness.
-    * [**Belief → Vote dynamics**](tutorials/tutorial_5_belief_to_vote.ipynb): Per-timestep mapping from posterior beliefs to vote distributions.
 
 -   :material-code-json: **API Reference**
 
