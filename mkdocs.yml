@@ -87,8 +87,6 @@ nav:
       - Decision Making: tutorials/tutorial_1_decision_making.ipynb
       - Voting Systems: tutorials/tutorial_2_voting_system.ipynb
       - Environment: tutorials/tutorial_3_environment.ipynb
-      - Precision: tutorials/tutorial_4_precision.ipynb
-      - Belief → Vote dynamics: tutorials/tutorial_5_belief_to_vote.ipynb
   - Extending ECI:
       - Write your own response function: extending_response_functions.md
   - API Reference: api.md
