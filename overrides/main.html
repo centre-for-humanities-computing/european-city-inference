@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+
+{% block content %}
+  {% if page.is_homepage %}
+  <section class="eci-hero">
+    <div class="eci-hero__inner">
+      <h1 class="eci-hero__title">European City Inference</h1>
+      <p class="eci-hero__tagline">
+        Agent-based political election simulator with hierarchical Bayesian
+        (HGF) voters, in JAX.
+      </p>
+      <div class="eci-hero__buttons">
+        <a href="{{ 'tutorials/tutorial_1_decision_making/' | url }}"
+           class="md-button md-button--primary">Start the Tutorials</a>
+        <a href="{{ 'api/' | url }}" class="md-button">API Reference</a>
+        <a href="{{ config.repo_url }}" class="md-button">GitHub</a>
+      </div>
+    </div>
+  </section>
+  {% endif %}
+  {{ super() }}
+{% endblock %}

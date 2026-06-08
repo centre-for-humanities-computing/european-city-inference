@@ -8,10 +8,14 @@ site_author: Sylvain Estebe
 
 theme:
   name: material
+  custom_dir: overrides
   logo: assets/logo.svg
   favicon: assets/logo.svg
   icon:
     repo: fontawesome/brands/github
+  font:
+    text: Inter
+    code: JetBrains Mono
   features:
     - navigation.instant
     - navigation.instant.progress
@@ -35,15 +39,15 @@ theme:
   palette:
     - media: "(prefers-color-scheme: light)"
       scheme: default
-      primary: light blue
-      accent: amber
+      primary: custom
+      accent: custom
       toggle:
         icon: material/weather-sunny
         name: Switch to dark mode
     - media: "(prefers-color-scheme: dark)"
       scheme: slate
-      primary: indigo
-      accent: amber
+      primary: custom
+      accent: custom
       toggle:
         icon: material/weather-night
         name: Switch to light mode
@@ -96,6 +100,9 @@ markdown_extensions:
   - pymdownx.emoji:
       emoji_index: !!python/name:material.extensions.emoji.twemoji
       emoji_generator: !!python/name:material.extensions.emoji.to_svg
+
+extra_css:
+  - stylesheets/extra.css
 
 extra_javascript:
   - javascripts/mathjax.js
