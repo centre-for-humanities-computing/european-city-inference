@@ -159,7 +159,13 @@ def response_function_pref(data, key, mask=None, *args, **kwargs):
     vote, softmax_probs, candidate_utilities, next_key
         See :class:`ResponseFunction` for the full shape contract.
     """
-    _, pref_candidate_gap, _ = _compute_candidate_utilities(data)
+    pref_candidate_gap = _get_pref_candidate_gap(
+        data["candidates"]["mean"],
+        data["candidates"]["precision"],
+        data["preferences"]["mean"],
+        data["preferences"]["precision"],
+    )
+
     utilities = -pref_candidate_gap
     return _sample_from_utilities(utilities, key, mask)
 
