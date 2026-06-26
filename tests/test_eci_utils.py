@@ -7,6 +7,7 @@ import pytest
 from eci.observations import _get_parameter_trajectory, generate_observations
 from eci.utils import (
     _extract_env_data_vectorized,
+    cross_entropy,
     get_voter_trajectory_data,
     kl_divergence,
 )
@@ -48,6 +49,34 @@ class TestKLDivergence:
         assert kl.shape == (2, 1)
         assert jnp.isclose(kl[0], 0.0)
         assert kl[1] > 0.0
+
+
+class TestCrossEntropy:
+    """Tests for the cross_entropy function."""
+
+    def test_cross_entropy_minus_kl_is_entropy(self):
+        """H(q, p) - KL(q || p) equals the differential entropy of q."""
+        m_q, p_q = jnp.array([0.3]), jnp.array([2.0])
+        m_p, p_p = jnp.array([0.7]), jnp.array([1.5])
+        ce = cross_entropy(m_q, p_q, m_p, p_p)
+        kl = kl_divergence(m_q, p_q, m_p, p_p)
+        entropy_q = 0.5 * (jnp.log(2 * jnp.pi) + 1.0 - jnp.log(p_q))
+        assert jnp.allclose(ce - kl, entropy_q)
+
+    def test_cross_entropy_self_is_entropy(self):
+        """H(q, q) equals the entropy of q, since KL(q || q) = 0."""
+        m, p = jnp.array([1.0]), jnp.array([3.0])
+        ce = cross_entropy(m, p, m, p)
+        entropy = 0.5 * (jnp.log(2 * jnp.pi) + 1.0 - jnp.log(p))
+        assert jnp.allclose(ce, entropy)
+
+    def test_cross_entropy_broadcasting(self):
+        """Broadcasting follows the same rules as kl_divergence."""
+        m_q = jnp.array([[0.0], [10.0]])
+        p_q = jnp.array([[1.0], [1.0]])
+        m_p, p_p = jnp.array([0.0]), jnp.array([1.0])
+        ce = cross_entropy(m_q, p_q, m_p, p_p)
+        assert ce.shape == (2, 1)
 
 
 class TestDataGeneration:

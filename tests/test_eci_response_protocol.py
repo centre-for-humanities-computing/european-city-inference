@@ -13,6 +13,7 @@ import pytest
 from eci.decision import (
     ResponseFunction,
     response_function,
+    response_function_cross_entropy,
     response_function_logpdf,
     response_function_pref,
 )
@@ -22,6 +23,7 @@ BUILTIN_RESPONSE_FNS = [
     response_function,
     response_function_logpdf,
     response_function_pref,
+    response_function_cross_entropy,
 ]
 
 

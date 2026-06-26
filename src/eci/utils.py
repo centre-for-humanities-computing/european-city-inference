@@ -34,6 +34,38 @@ def kl_divergence(
     )
 
 
+def cross_entropy(
+    mean_belief: ArrayLike,
+    precision_belief: ArrayLike,
+    mean_pref: ArrayLike,
+    precision_pref: ArrayLike,
+) -> ArrayLike:
+    r"""Cross-entropy :math:`H(q, p)` between two univariate Gaussians (precisions).
+
+    Same argument order as :func:`kl_divergence`: ``q`` is
+    ``(mean_belief, precision_belief)`` and ``p`` is
+    ``(mean_pref, precision_pref)``.
+
+    Equals :math:`\mathrm{KL}(q \| p) + H(q)`, i.e. the KL term plus the entropy
+    of ``q``. Compared to KL, the extra entropy term means a diffuse (low
+    precision) ``q`` is penalised even when its mean matches ``p``.
+
+    Returns
+    -------
+    Element-wise cross-entropy. Broadcasting follows NumPy / JAX rules.
+    """
+    mean_belief = jnp.asarray(mean_belief)
+    precision_belief = jnp.asarray(precision_belief)
+    mean_pref = jnp.asarray(mean_pref)
+    precision_pref = jnp.asarray(precision_pref)
+    return 0.5 * (
+        jnp.log(2.0 * jnp.pi)
+        - jnp.log(precision_pref)
+        + (precision_pref / precision_belief)
+        + (precision_pref * (mean_belief - mean_pref) ** 2)
+    )
+
+
 def get_voter_trajectory_data(env, voter_id: int, pref_idx: int = 0):
     """Retrieve arrays for plotting one voter's belief trajectory.
 
