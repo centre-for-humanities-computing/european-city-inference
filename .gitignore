@@ -38,3 +38,8 @@ docs/figure_1.ipynb
 /figures/
 /plots/
 /results/
+LITERATURE.md
+.gitignore
+RESEARCH.md
+PAPER_PLAN.md
+notebooks/run_election_from_data.ipynb

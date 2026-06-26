@@ -1,3 +1,4 @@
+from eci.voting.borda import _vote_borda
 from eci.voting.plurality import _vote_plurality
 from eci.voting.quadratic import _compute_sequential_qv_allocation, _vote_quadratic
 from eci.voting.types import VoteResult
@@ -7,6 +8,7 @@ __all__ = [
     # Rules
     "_vote_plurality",
     "_vote_quadratic",
+    "_vote_borda",
     # Return type
     "VoteResult",
     # Helpers

@@ -2,7 +2,7 @@ import jax.numpy as jnp
 from jax.typing import ArrayLike
 
 from eci.decision.scoring import ScoringFn, score_normalized
-from eci.utils import kl_divergence
+from eci.utils import cross_entropy, kl_divergence
 
 
 def _get_belief_preference_gap(
@@ -35,6 +35,27 @@ def _get_pref_candidate_gap(
         pref_precision[:, None, :],
     )
     return jnp.sum(gap_per_dim, axis=-1)
+
+
+def _get_pref_candidate_cross_entropy(
+    cand_mean: jnp.ndarray,
+    cand_precision: jnp.ndarray,
+    pref_mean: jnp.ndarray,
+    pref_precision: jnp.ndarray,
+) -> jnp.ndarray:
+    """Cross-entropy H(candidate || preference) summed across dims → (n_agents, n_cand).
+
+    The cross-entropy counterpart of :func:`_get_pref_candidate_gap` (which uses
+    KL). Equals KL plus the candidate's entropy, so it also penalises diffuse
+    (low-precision) candidates.
+    """
+    ce_per_dim = cross_entropy(
+        cand_mean[None, :, :],
+        cand_precision[None, :, :],
+        pref_mean[:, None, :],
+        pref_precision[:, None, :],
+    )
+    return jnp.sum(ce_per_dim, axis=-1)
 
 
 def _get_expected_future_belief_gap(

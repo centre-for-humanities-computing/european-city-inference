@@ -1,6 +1,7 @@
 from eci.decision.response import (
     ResponseFunction,
     response_function,
+    response_function_cross_entropy,
     response_function_logpdf,
     response_function_precision,
     response_function_pref,
@@ -17,6 +18,7 @@ from eci.decision.scoring import (
 from eci.decision.utilities import (
     _compute_candidate_utilities,
     _get_belief_preference_gap,
+    _get_pref_candidate_cross_entropy,
     _get_pref_candidate_gap,
 )
 
@@ -31,12 +33,14 @@ __all__ = [
     "_compute_candidate_utilities",
     "_get_belief_preference_gap",
     "_get_pref_candidate_gap",
+    "_get_pref_candidate_cross_entropy",
     # Sampling
     "_sample_choice",
     "_sample_from_utilities",
     # Response functions + Protocol
     "ResponseFunction",
     "response_function",
+    "response_function_cross_entropy",
     "response_function_logpdf",
     "response_function_pref",
     "response_function_precision",

@@ -10,6 +10,7 @@ from eci.decision.utilities import (
     _compute_candidate_utilities,
     _get_belief_preference_gap,
     _get_expected_future_belief_gap,
+    _get_pref_candidate_cross_entropy,
     _get_pref_candidate_gap,
 )
 
@@ -167,6 +168,43 @@ def response_function_pref(data, key, mask=None, *args, **kwargs):
     )
 
     utilities = -pref_candidate_gap
+    return _sample_from_utilities(utilities, key, mask)
+
+
+# TODO: Maybe give full data parameter instead of dataframe
+def response_function_cross_entropy(data, key, mask=None, *args, **kwargs):
+    """Sample one vote per agent using negative cross-entropy H(candidate, pref).
+
+    The cross-entropy counterpart of :func:`response_function_pref`: it scores
+    each candidate by ``-H(candidate || preference)`` instead of ``-KL``. Since
+    ``H = KL + entropy(candidate)``, a diffuse (low-precision) candidate is
+    penalised even when its mean matches the preference.
+
+    Parameters
+    ----------
+    data
+        Agent data dict with ``beliefs``, ``preferences``, ``candidates``,
+        each holding ``mean`` and ``precision`` arrays.
+    key
+        A JAX PRNG key for seeding categorical sampling.
+    mask
+        Boolean array of shape ``(n_candidates,)``. ``True`` keeps the
+        candidate, ``False`` excludes it (utility set to ``-inf`` before
+        softmax).
+
+    Returns
+    -------
+    vote, softmax_probs, candidate_utilities, next_key
+        See :class:`ResponseFunction` for the full shape contract.
+    """
+    cross_entropy_gap = _get_pref_candidate_cross_entropy(
+        data["candidates"]["mean"],
+        data["candidates"]["precision"],
+        data["preferences"]["mean"],
+        data["preferences"]["precision"],
+    )
+
+    utilities = -cross_entropy_gap
     return _sample_from_utilities(utilities, key, mask)
 
 
