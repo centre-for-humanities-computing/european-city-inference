@@ -61,7 +61,7 @@ class PerceptualModel:
 
     def _build_network(self) -> Network:
         """Build a fresh HGF network with the configured hierarchy."""
-        network = Network(update_type=self.config.update_type)
+        network = Network(volatility_updates=self.config.update_type)
         network.add_nodes(
             kind="continuous-state",
             n_nodes=self.n_preferences,
