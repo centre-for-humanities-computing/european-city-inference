@@ -41,7 +41,7 @@ def _vote_quadratic(
     _, softmax_probs, candidate_utilities, key = response_function(data, key)
 
     # Allocate credits → votes per (agent, candidate).
-    votes_matrix, credits_spent = _compute_sequential_qv_allocation(
+    votes_matrix, credits_spent = _compute_qv_allocation(
         key, candidate_utilities, budget, num_votes=num_votes
     )
     votes_per_candidate = jnp.sum(votes_matrix, axis=0)
@@ -93,9 +93,7 @@ def _credits_to_votes(credits):
     return jnp.floor(jnp.sqrt(credits)).astype(jnp.int32)
 
 
-def _compute_sequential_qv_allocation(
-    key, utilities, budget, num_votes=5, noise_scale=0.05
-):
+def _compute_qv_allocation(key, utilities, budget, num_votes=5, noise_scale=0.05):
     """Allocate QV credits to candidates per agent, then convert to votes.
 
     Parameters
@@ -135,3 +133,8 @@ def _compute_sequential_qv_allocation(
     )
     credits = _normalize_credit_budget(jittered, budget, picks)
     return _credits_to_votes(credits), credits
+
+
+# Backward-compatible alias for code written before the allocation stopped being
+# sequential.
+_compute_sequential_qv_allocation = _compute_qv_allocation

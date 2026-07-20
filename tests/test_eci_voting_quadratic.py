@@ -5,9 +5,8 @@ Notes on the refactor:
   Its return dict now uses keys `votes`, `winner`, `softmax`,
   `candidate_utilities`, `credits_spent`, `qv_votes_matrix` (no more
   `final_winner`, `vote_round_1`, `softmax_probs_round_1`).
-- `_compute_sequential_qv_allocation` was rewritten with Gumbel-top-k
-  sampling — it no longer calls `_sample_choice` in a loop, so the old
-  `mock_sample.call_count == 5` assertion no longer applies.
+- `_compute_qv_allocation` uses Gumbel-top-k sampling rather than sequential
+  calls to `_sample_choice`.
 - `strategic_quadratic_vote` is currently commented out.
 """
 
@@ -16,6 +15,7 @@ import jax.numpy as jnp
 import pytest
 
 from eci.voting import (
+    _compute_qv_allocation,
     _compute_sequential_qv_allocation,
     _vote_quadratic,
 )
@@ -65,14 +65,14 @@ class TestQuadraticVoting:
         assert jnp.array_equal(results["votes_matrix"], results["qv_votes_matrix"])
         assert jnp.array_equal(results["votes_per_candidate"], results["votes"])
 
-    def test_compute_sequential_qv_allocation_shapes(self):
+    def test_compute_qv_allocation_shapes(self):
         """Allocation produces integer vote matrices of the expected shape."""
         key = jax.random.PRNGKey(42)
         # 2 agents, 3 candidates
         candidate_utilities = jnp.array([[0.8, 0.1, 0.1], [0.2, 0.5, 0.3]])
         budget = 100.0
 
-        votes_matrix, credits_spent = _compute_sequential_qv_allocation(
+        votes_matrix, credits_spent = _compute_qv_allocation(
             key, candidate_utilities, budget
         )
 
@@ -83,25 +83,25 @@ class TestQuadraticVoting:
         assert jnp.all(credits_spent >= 0.0)
 
     @pytest.mark.parametrize("num_votes", [None, 2, 5])
-    def test_compute_sequential_qv_allocation_spends_full_budget(self, num_votes):
+    def test_compute_qv_allocation_spends_full_budget(self, num_votes):
         """Every allocation strategy must preserve each agent's credit budget."""
         key = jax.random.PRNGKey(42)
         candidate_utilities = jnp.zeros((2, 5))
         budget = 100.0
 
-        _, credits_spent = _compute_sequential_qv_allocation(
+        _, credits_spent = _compute_qv_allocation(
             key, candidate_utilities, budget, num_votes=num_votes
         )
 
         assert jnp.allclose(jnp.sum(credits_spent, axis=1), budget)
 
-    def test_compute_sequential_qv_allocation_zero_budget(self):
+    def test_compute_qv_allocation_zero_budget(self):
         """Zero budget should yield zero votes and zero credits without NaNs."""
         key = jax.random.PRNGKey(42)
         candidate_utilities = jnp.zeros((2, 3))
         budget = 0.0
 
-        votes_matrix, credits_spent = _compute_sequential_qv_allocation(
+        votes_matrix, credits_spent = _compute_qv_allocation(
             key, candidate_utilities, budget
         )
 
@@ -109,6 +109,10 @@ class TestQuadraticVoting:
         assert not jnp.isnan(votes_matrix).any()
         assert jnp.all(votes_matrix == 0)
         assert jnp.all(credits_spent == 0.0)
+
+    def test_sequential_allocation_name_remains_compatible(self):
+        """The previous private helper name remains available during migration."""
+        assert _compute_sequential_qv_allocation is _compute_qv_allocation
 
     @pytest.mark.skip(
         reason="strategic_quadratic_vote is currently commented out in "
