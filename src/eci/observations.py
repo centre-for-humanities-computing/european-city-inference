@@ -133,12 +133,12 @@ def generate_observations(
     _validate_observation_args(scenario, shock_pattern)
     rng = np.random.default_rng(seed)
     s_time, r_time = _resolve_shock_times(n_steps, shock_time, recovery_time)
-    # Scenario 1 is always stable (no shock). Scenario 2 produces a shock:
-    # if no explicit shock_pattern is given, default to a "phase" shock.
+    # Scenario 1 is always stable. Scenario 2 enables an explicitly requested
+    # shock pattern; None remains stable in both scenarios.
     if scenario == 1:
         pattern = None
     else:  # scenario == 2
-        pattern = shock_pattern if shock_pattern is not None else "phase"
+        pattern = shock_pattern
     alpha_t, beta_t = _get_parameter_trajectory(
         n_steps, s_time, r_time, pattern, trend_shape, phase_params, recover=recover
     )

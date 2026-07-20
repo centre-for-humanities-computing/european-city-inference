@@ -133,6 +133,14 @@ class TestDataGeneration:
         obs2 = generate_observations(2, 10, seed=123)
         assert np.array_equal(obs1, obs2)
 
+    def test_scenario_two_without_pattern_is_stable(self):
+        """Scenario 2 only introduces a shock when a pattern is requested."""
+        stable = generate_observations(2, 30, scenario=1, seed=123)
+        no_pattern = generate_observations(
+            2, 30, scenario=2, shock_pattern=None, seed=123
+        )
+        assert np.array_equal(stable, no_pattern)
+
     def test_generate_observations_validation(self):
         """Test error raising for invalid inputs."""
         with pytest.raises(ValueError, match="Scenario must be 1 or 2"):
