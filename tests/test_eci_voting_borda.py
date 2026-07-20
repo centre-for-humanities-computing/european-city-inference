@@ -70,3 +70,13 @@ class TestBordaVoting:
         # but cand1 is a strong broadly-acceptable runner-up.
         assert jnp.array_equal(result["votes_per_candidate"], jnp.array([4, 3, 2]))
         assert int(result["winner"]) == 0
+
+    def test_borda_uses_average_rank_for_tied_utilities(self):
+        """Indifferent voters must not systematically favour a candidate index."""
+        utilities = jnp.zeros((2, 3))
+
+        result = _vote_borda({}, self._fake_response(utilities), jax.random.PRNGKey(0))
+
+        assert jnp.array_equal(result["votes_matrix"], jnp.ones((2, 3)))
+        assert jnp.array_equal(result["votes_per_candidate"], jnp.full(3, 2.0))
+        assert int(result["winner"]) == 0
