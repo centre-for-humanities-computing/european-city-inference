@@ -79,9 +79,11 @@ def get_voter_trajectory_data(env, voter_id: int, pref_idx: int = 0):
         Preference-dimension index to extract.
     """
     voter = next(v for v in env.voters if v.id == voter_id)
+    trajectory_idx = env.preferences_idx[pref_idx]
+    trajectory = voter.trajectory[trajectory_idx]
     return {
-        "expected_mean": voter.trajectory[0]["expected_mean"],
-        "expected_precision": voter.trajectory[0]["expected_precision"],
+        "expected_mean": trajectory["expected_mean"],
+        "expected_precision": trajectory["expected_precision"],
         "observations": env.input_data[:, pref_idx],
         "preference_params": (
             voter.preferences["mean"][pref_idx],

@@ -156,31 +156,31 @@ class TestDataExtraction:
     def test_get_voter_trajectory_data(self):
         """Verify data retrieval for a specific voter.
 
-        `get_voter_trajectory_data` reads ``voter.trajectory[0]`` and expects
-        each entry to carry ``expected_mean`` / ``expected_precision``.
+        `get_voter_trajectory_data` maps the requested preference dimension
+        to its HGF trajectory node.
         """
         # Mock Environment and Voter
         env = MagicMock()
         voter = MagicMock()
         voter.id = 1
         voter.trajectory = [
-            {"expected_mean": [0.0], "expected_precision": [1.0]},  # read
+            {"expected_mean": [0.0], "expected_precision": [1.0]},
             {"expected_mean": [0.5], "expected_precision": [1.0]},
         ]
-        voter.preferences = {"mean": [0.9], "precision": [2.0]}
+        voter.preferences = {"mean": [0.9, 0.8], "precision": [2.0, 3.0]}
 
         env.voters = [voter]
+        env.preferences_idx = [0, 1]
         # Mock input_data (shape: n_steps, n_preferences)
         env.input_data = np.zeros((10, 5))
 
-        data = get_voter_trajectory_data(env, voter_id=1, pref_idx=0)
+        data = get_voter_trajectory_data(env, voter_id=1, pref_idx=1)
 
         assert "expected_mean" in data
         assert "observations" in data
         assert data["title_suffix"] == "for Voter 1"
-        assert data["preference_params"] == (0.9, 2.0)
-        # Confirms we read trajectory[0].
-        assert data["expected_mean"] == [0.0]
+        assert data["preference_params"] == (0.8, 3.0)
+        assert data["expected_mean"] == [0.5]
 
     def test_extract_env_data_vectorized(self):
         """Test extraction of complex nested structures into JAX arrays."""
