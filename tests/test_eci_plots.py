@@ -3,10 +3,12 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import pytest
+from matplotlib.animation import FuncAnimation
 
 matplotlib.use("Agg")
 
 from eci.plots import (
+    animate_belief_trajectory,
     plot_belief_trajectory,
     plot_belief_vote_evolution,
     plot_preference,
@@ -117,6 +119,24 @@ class TestPlots:
         assert plurality_axis.get_yticklabels()[0].get_text() == "North"
         assert len(plurality_axis.images) == 1
         assert len(quadratic_axis.images) == 1
+
+    def test_animate_belief_trajectory_renders_frame(self):
+        """Verify the animation callback updates its title and artists."""
+        steps = 4
+        animation = animate_belief_trajectory(
+            expected_mean=np.linspace(0, 1, steps),
+            expected_precision=np.ones(steps),
+            observations=np.linspace(0.1, 0.9, steps),
+            preference_params=(0.5, 10.0),
+            title_suffix="Test",
+        )
+
+        updated_artists = animation._func(1)
+
+        assert isinstance(animation, FuncAnimation)
+        assert len(updated_artists) == 3
+        assert animation._fig.axes[0].get_title() == "Belief Trajectory Test — step 1"
+        animation._draw_was_started = True
 
     def test_plot_voting_metrics(self):
         """Verifies that plot_voting_metrics generates the two subplots."""

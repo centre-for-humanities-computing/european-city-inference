@@ -1,12 +1,15 @@
 """Belief trajectory plots (single voter)."""
 
 from dataclasses import dataclass
-from typing import Any, Optional, Sequence, Tuple, cast
+from typing import Optional, Sequence, Tuple, cast
 
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib import gridspec
 from matplotlib.animation import FuncAnimation
+from matplotlib.collections import PathCollection, PolyCollection
+from matplotlib.lines import Line2D
+from matplotlib.text import Text
 from numpy.typing import ArrayLike
 from scipy.stats import norm
 
@@ -278,6 +281,216 @@ def plot_belief_vote_evolution(
     return figure, (axes.belief, axes.density, axes.plurality, axes.quadratic)
 
 
+@dataclass(frozen=True)
+class _BeliefAnimationData:
+    """Numerical series required to render each animation frame."""
+
+    time_steps: np.ndarray
+    observations: np.ndarray
+    expected_means: np.ndarray
+    confidence_bounds: np.ndarray
+    belief_standard_deviations: np.ndarray
+    density_axis_values: np.ndarray
+
+
+@dataclass(frozen=True)
+class _BeliefAnimationAxes:
+    """Main and density axes used by a belief animation."""
+
+    main: plt.Axes
+    density: plt.Axes
+
+
+@dataclass
+class _BeliefAnimationArtists:
+    """Mutable artists updated as the animation advances."""
+
+    observations: PathCollection
+    belief_mean: Line2D
+    belief_density: Line2D
+    title: Text
+    confidence_band: Optional[PolyCollection] = None
+    belief_density_fill: Optional[PolyCollection] = None
+
+
+@dataclass
+class _BeliefFrameRenderer:
+    """Render one frame of a belief trajectory animation."""
+
+    data: _BeliefAnimationData
+    axes: _BeliefAnimationAxes
+    artists: _BeliefAnimationArtists
+    title_suffix: str
+
+    def __call__(self, frame: int) -> tuple[PathCollection, Line2D, Line2D]:
+        visible_steps = frame + 1
+        self.artists.observations.set_offsets(
+            np.c_[
+                self.data.time_steps[:visible_steps],
+                self.data.observations[:visible_steps],
+            ]
+        )
+        self.artists.belief_mean.set_data(
+            self.data.time_steps[:visible_steps],
+            self.data.expected_means[:visible_steps],
+        )
+
+        if self.artists.confidence_band is not None:
+            self.artists.confidence_band.remove()
+        self.artists.confidence_band = self.axes.main.fill_between(
+            self.data.time_steps[:visible_steps],
+            self.data.expected_means[:visible_steps]
+            - self.data.confidence_bounds[:visible_steps],
+            self.data.expected_means[:visible_steps]
+            + self.data.confidence_bounds[:visible_steps],
+            color="#D62728",
+            alpha=0.1,
+        )
+
+        current_density = norm.pdf(
+            self.data.density_axis_values,
+            loc=self.data.expected_means[frame],
+            scale=self.data.belief_standard_deviations[frame],
+        )
+        maximum_density = current_density.max()
+        if maximum_density > 0:
+            current_density = current_density / maximum_density * 0.9
+        self.artists.belief_density.set_data(
+            current_density,
+            self.data.density_axis_values,
+        )
+
+        if self.artists.belief_density_fill is not None:
+            self.artists.belief_density_fill.remove()
+        self.artists.belief_density_fill = self.axes.density.fill_betweenx(
+            self.data.density_axis_values,
+            0,
+            current_density,
+            color="#D62728",
+            alpha=0.15,
+        )
+        self.artists.title.set_text(
+            f"Belief Trajectory {self.title_suffix} — step {frame}".strip()
+        )
+        return (
+            self.artists.observations,
+            self.artists.belief_mean,
+            self.artists.belief_density,
+        )
+
+
+def _calculate_animation_limits(
+    observations: np.ndarray,
+    expected_means: np.ndarray,
+    confidence_bounds: np.ndarray,
+    preference_params: Tuple[float, float],
+) -> Tuple[float, float]:
+    """Calculate y-axis limits that contain observations and both distributions."""
+    preference_mean = preference_params[0]
+    preference_standard_deviation = 1.0 / np.sqrt(preference_params[1])
+    lower_bound = min(
+        float(observations.min()),
+        float((expected_means - confidence_bounds).min()),
+        preference_mean - 4 * preference_standard_deviation,
+    )
+    upper_bound = max(
+        float(observations.max()),
+        float((expected_means + confidence_bounds).max()),
+        preference_mean + 4 * preference_standard_deviation,
+    )
+    padding = 0.05 * (upper_bound - lower_bound)
+    return lower_bound - padding, upper_bound + padding
+
+
+def _create_animation_axes(
+    n_steps: int,
+    y_limits: Tuple[float, float],
+    figure_size: Tuple[float, float],
+) -> tuple[plt.Figure, _BeliefAnimationAxes]:
+    """Create and configure the axes for a belief animation."""
+    figure = plt.figure(figsize=figure_size)
+    grid = gridspec.GridSpec(1, 6, figure=figure, wspace=0.02)
+    main_axis = figure.add_subplot(grid[0, :-1])
+    density_axis = figure.add_subplot(grid[0, -1], sharey=main_axis)
+    main_axis.set_xlim(0, max(n_steps - 1, 1))
+    main_axis.set_ylim(*y_limits)
+    main_axis.set(xlabel="Time Step")
+    main_axis.grid(True, ls=":", alpha=0.6)
+    density_axis.set(xlim=(0, 1))
+    density_axis.axis("off")
+    return figure, _BeliefAnimationAxes(main_axis, density_axis)
+
+
+def _plot_preference_density(
+    density_axis: plt.Axes,
+    density_axis_values: np.ndarray,
+    preference_params: Tuple[float, float],
+    final_belief_mean: float,
+    final_belief_standard_deviation: float,
+) -> None:
+    """Plot the fixed preference density beside the animated belief density."""
+    preference_mean = preference_params[0]
+    preference_standard_deviation = 1.0 / np.sqrt(preference_params[1])
+    preference_density = norm.pdf(
+        density_axis_values,
+        loc=preference_mean,
+        scale=preference_standard_deviation,
+    )
+    final_belief_density = norm.pdf(
+        density_axis_values,
+        loc=final_belief_mean,
+        scale=final_belief_standard_deviation,
+    )
+    density_peak = max(preference_density.max(), final_belief_density.max())
+    density_scale = (0.9 / density_peak) if density_peak > 0 else 1.0
+    scaled_preference_density = preference_density * density_scale
+    density_axis.fill_betweenx(
+        density_axis_values,
+        0,
+        scaled_preference_density,
+        color="gray",
+        alpha=0.2,
+    )
+    density_axis.plot(
+        scaled_preference_density,
+        density_axis_values,
+        c="#555555",
+        lw=1,
+        alpha=0.8,
+        label="Preference",
+    )
+    density_axis.axhline(
+        preference_mean,
+        c="k",
+        ls="--",
+        lw=1,
+        alpha=0.5,
+    )
+
+
+def _initialize_animation_artists(
+    axes: _BeliefAnimationAxes,
+    title_suffix: str,
+) -> _BeliefAnimationArtists:
+    """Create the artists that will be updated for every animation frame."""
+    observation_points = axes.main.scatter(
+        [], [], s=15, c="gray", alpha=0.4, label="Observations"
+    )
+    (mean_line,) = axes.main.plot([], [], c="#D62728", lw=2.5, label="Belief (Mean)")
+    (belief_density_line,) = axes.density.plot(
+        [], [], c="#D62728", lw=1.5, alpha=0.9, label="Belief"
+    )
+    title = axes.main.set_title(f"Belief Trajectory {title_suffix}".strip())
+    axes.main.legend(loc="upper left")
+    axes.density.legend(loc="upper right", fontsize=8, frameon=False)
+    return _BeliefAnimationArtists(
+        observations=observation_points,
+        belief_mean=mean_line,
+        belief_density=belief_density_line,
+        title=title,
+    )
+
+
 def animate_belief_trajectory(
     expected_mean: np.ndarray,
     expected_precision: np.ndarray,
@@ -293,89 +506,49 @@ def animate_belief_trajectory(
     expected_precision = np.asarray(expected_precision)
     observations = np.asarray(observations)
 
-    n_steps = len(observations)
-    time_steps = np.arange(n_steps)
-    ci_bound = 1.96 * (1.0 / np.sqrt(expected_precision))
-    target_mean, target_std = (
-        preference_params[0],
-        1.0 / np.sqrt(preference_params[1]),
-    )
-    belief_std = 1.0 / np.sqrt(expected_precision)
+    timestep_count = len(observations)
+    time_steps = np.arange(timestep_count)
+    confidence_bounds = 1.96 * (1.0 / np.sqrt(expected_precision))
+    belief_standard_deviations = 1.0 / np.sqrt(expected_precision)
 
     if ylim is None:
-        lo = min(
-            float(observations.min()),
-            float((expected_mean - ci_bound).min()),
-            target_mean - 4 * target_std,
+        ylim = _calculate_animation_limits(
+            observations,
+            expected_mean,
+            confidence_bounds,
+            preference_params,
         )
-        hi = max(
-            float(observations.max()),
-            float((expected_mean + ci_bound).max()),
-            target_mean + 4 * target_std,
-        )
-        pad = 0.05 * (hi - lo)
-        ylim = (lo - pad, hi + pad)
 
-    fig = plt.figure(figsize=figsize)
-    gs = gridspec.GridSpec(1, 6, figure=fig, wspace=0.02)
-    ax_main = fig.add_subplot(gs[0, :-1])
-    ax_density = fig.add_subplot(gs[0, -1], sharey=ax_main)
-    ax_main.set_xlim(0, max(n_steps - 1, 1))
-    ax_main.set_ylim(*ylim)
-    ax_main.set(xlabel="Time Step")
-    ax_main.grid(True, ls=":", alpha=0.6)
-    ax_density.set(xlim=(0, 1))
-    ax_density.axis("off")
-
-    y_vals = np.linspace(ylim[0], ylim[1], 500)
-    pref_pdf_raw = norm.pdf(y_vals, loc=target_mean, scale=target_std)
-    final_belief_pdf_raw = norm.pdf(y_vals, loc=expected_mean[-1], scale=belief_std[-1])
-    peak = max(pref_pdf_raw.max(), final_belief_pdf_raw.max())
-    pdf_scale = (0.9 / peak) if peak > 0 else 1.0
-    pref_pdf = pref_pdf_raw * pdf_scale
-    ax_density.fill_betweenx(y_vals, 0, pref_pdf, color="gray", alpha=0.2)
-    ax_density.plot(pref_pdf, y_vals, c="#555555", lw=1, alpha=0.8, label="Preference")
-    ax_density.axhline(target_mean, c="k", ls="--", lw=1, alpha=0.5)
-
-    obs_scatter = ax_main.scatter(
-        [], [], s=15, c="gray", alpha=0.4, label="Observations"
+    figure, axes = _create_animation_axes(timestep_count, ylim, figsize)
+    density_axis_values = np.linspace(ylim[0], ylim[1], 500)
+    _plot_preference_density(
+        axes.density,
+        density_axis_values,
+        preference_params,
+        float(expected_mean[-1]),
+        float(belief_standard_deviations[-1]),
     )
-    (mean_line,) = ax_main.plot([], [], c="#D62728", lw=2.5, label="Belief (Mean)")
-    ci_fill: dict[str, Any] = {"poly": None}
-    belief_fill: dict[str, Any] = {"poly": None}
-    (belief_line,) = ax_density.plot(
-        [], [], c="#D62728", lw=1.5, alpha=0.9, label="Belief"
-    )
-    title = ax_main.set_title(f"Belief Trajectory {title_suffix}".strip())
-    ax_main.legend(loc="upper left")
-    ax_density.legend(loc="upper right", fontsize=8, frameon=False)
 
-    def update(frame: int):
-        """Render animation frame ``frame`` (matplotlib ``FuncAnimation`` callback)."""
-        k = frame + 1
-        obs_scatter.set_offsets(np.c_[time_steps[:k], observations[:k]])
-        mean_line.set_data(time_steps[:k], expected_mean[:k])
-        if ci_fill["poly"] is not None:
-            ci_fill["poly"].remove()
-        ci_fill["poly"] = ax_main.fill_between(
-            time_steps[:k],
-            expected_mean[:k] - ci_bound[:k],
-            expected_mean[:k] + ci_bound[:k],
-            color="#D62728",
-            alpha=0.1,
-        )
-        cur_pdf = norm.pdf(y_vals, loc=expected_mean[frame], scale=belief_std[frame])
-        cur_pdf = cur_pdf / cur_pdf.max() * 0.9 if cur_pdf.max() > 0 else cur_pdf
-        belief_line.set_data(cur_pdf, y_vals)
-        if belief_fill["poly"] is not None:
-            belief_fill["poly"].remove()
-        belief_fill["poly"] = ax_density.fill_betweenx(
-            y_vals, 0, cur_pdf, color="#D62728", alpha=0.15
-        )
-        title.set_text(f"Belief Trajectory {title_suffix} — step {frame}".strip())
-        return obs_scatter, mean_line, belief_line
-
-    anim = FuncAnimation(
-        fig, update, frames=n_steps, interval=interval, blit=False, repeat=False
+    animation_data = _BeliefAnimationData(
+        time_steps=time_steps,
+        observations=observations,
+        expected_means=expected_mean,
+        confidence_bounds=confidence_bounds,
+        belief_standard_deviations=belief_standard_deviations,
+        density_axis_values=density_axis_values,
     )
-    return anim
+    frame_renderer = _BeliefFrameRenderer(
+        data=animation_data,
+        axes=axes,
+        artists=_initialize_animation_artists(axes, title_suffix),
+        title_suffix=title_suffix,
+    )
+    animation = FuncAnimation(
+        figure,
+        frame_renderer,
+        frames=timestep_count,
+        interval=interval,
+        blit=False,
+        repeat=False,
+    )
+    return animation
