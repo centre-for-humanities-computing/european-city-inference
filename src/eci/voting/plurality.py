@@ -20,14 +20,14 @@ def _vote_plurality(
     data:
         Agent data (beliefs, preferences, candidates).
     response_function:
-        Implements the :class:`~eci.voting_system.ResponseFunction` protocol.
+        Implements the :class:`~eci.decision.ResponseFunction` protocol.
     key:
         A JAX PRNG key used for seeding random operations.
 
     Returns
     -------
     VoteResult
-        See :class:`~eci.voting_system.types.VoteResult` for the full
+        See :class:`~eci.voting.types.VoteResult` for the full
         field contract.
     """
     # TODO: re-enable runoff (top-2) voting; the prototype lives in the git

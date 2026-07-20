@@ -1,9 +1,9 @@
 """Tests for belief/preference/candidate KL gap helpers.
 
-Note: these helpers used to live in `eci.voting_system.beliefs` (now deleted)
-and have been merged into `eci.voting_system.decisions`. `_get_pref_belief_gap`
-was renamed to `_get_belief_preference_gap` (KL(beliefs || preferences)).
-Their public signatures now take raw arrays instead of a `data` dict.
+These helpers now live in `eci.decision.utilities`.
+`_get_pref_belief_gap` was renamed to `_get_belief_preference_gap`
+(KL(beliefs || preferences)). Their public signatures take raw arrays
+instead of a `data` dict.
 """
 
 import jax.numpy as jnp

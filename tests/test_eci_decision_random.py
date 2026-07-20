@@ -6,7 +6,7 @@ top-2 selection helper) survives in version control, and they fail loudly
 once the module is restored without matching tests being re-enabled.
 
 TODO: restore `_vote_uniform_random` and `_find_top_two_winners` (or their
-replacements `_find_top_k_winners` in `eci.utils`) and re-enable.
+replacement `_find_top_k_winners` in `eci.voting`) and re-enable.
 """
 
 import pytest

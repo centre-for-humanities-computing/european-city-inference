@@ -24,7 +24,7 @@ def _vote_quadratic(
     data:
         Agent data dict (beliefs, preferences, candidates).
     response_function:
-        Implements the :class:`~eci.voting_system.ResponseFunction` protocol.
+        Implements the :class:`~eci.decision.ResponseFunction` protocol.
     key:
         A JAX PRNG key for seeding random operations.
     budget:
@@ -35,7 +35,7 @@ def _vote_quadratic(
     Returns
     -------
     VoteResult
-        See :class:`~eci.voting_system.types.VoteResult` for the full
+        See :class:`~eci.voting.types.VoteResult` for the full
         field contract. QV adds ``credits_spent``.
     """
     # Sample round 1 preferences.
