@@ -1,7 +1,12 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 import jax.numpy as jnp
 from jax.typing import ArrayLike
 
-from eci.decision.types import ElectionData
+if TYPE_CHECKING:
+    from eci.decision.types import ElectionData
 
 
 def kl_divergence(
