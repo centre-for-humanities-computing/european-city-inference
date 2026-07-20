@@ -84,19 +84,22 @@ class PerceptualModel:
 
     def _run_one_agent(
         self,
-        mu: jax.Array,
-        pi: jax.Array,
+        preference_means: jax.Array,
+        preference_precisions: jax.Array,
         tonic_volatility: jax.Array,
         observations: jax.Array,
         network: Network,
     ) -> Tuple[Any, Any]:
         """Run HGF inference for a single agent. Mutates ``network``."""
         # Inject this agent's preferences on the (private) preferences node.
-        network.attributes[-1]["preferences"] = {"mean": mu, "precision": pi}
+        network.attributes[-1]["preferences"] = {
+            "mean": preference_means,
+            "precision": preference_precisions,
+        }
         # Override tonic_volatility on every input node and its value parent.
-        for p, idx in enumerate(network.input_idxs):
-            network.attributes[idx]["tonic_volatility"] = tonic_volatility
-            value_parent_idx = self.n_preferences + 2 * p
+        for preference_position, input_node_idx in enumerate(network.input_idxs):
+            network.attributes[input_node_idx]["tonic_volatility"] = tonic_volatility
+            value_parent_idx = self.n_preferences + 2 * preference_position
             network.attributes[value_parent_idx]["tonic_volatility"] = tonic_volatility
         # Feed the observation stream and run.
         network.input_data(input_data=observations)

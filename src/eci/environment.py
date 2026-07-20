@@ -177,15 +177,21 @@ class Environment:
         for i, voter in enumerate(self.voters):
             voter.trajectory = tree_map(lambda x, _i=i: x[_i], self.node_trajectories)
 
-    def _run_single_agent_inference(self, mu, pi, tonic_volatility, network=None):
+    def _run_single_agent_inference(
+        self,
+        preference_means,
+        preference_precisions,
+        tonic_volatility,
+        network=None,
+    ):
         """Legacy single-agent inference path. Delegates to PerceptualModel.
 
         Kept for tests that mock-patch this method. New code should use
         ``self.perceptual.run(...)``.
         """
         return self.perceptual._run_one_agent(
-            mu,
-            pi,
+            preference_means,
+            preference_precisions,
             tonic_volatility,
             self.world.observations,
             network if network is not None else self.perceptual.network,
