@@ -231,10 +231,10 @@ def response_function_precision(data, key, mask=None, *args, **kwargs):
     """
     tau = jnp.sum(data["beliefs"]["precision"], axis=-1, keepdims=True)
     gap = _get_pref_candidate_gap(
-        data["preferences"]["mean"],
-        data["preferences"]["precision"],
         data["candidates"]["mean"],
         data["candidates"]["precision"],
+        data["preferences"]["mean"],
+        data["preferences"]["precision"],
     )
     utilities = -tau * gap
     return _sample_from_utilities(utilities, key, mask)

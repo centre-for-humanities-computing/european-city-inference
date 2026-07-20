@@ -15,6 +15,7 @@ from eci.decision import (
     response_function,
     response_function_cross_entropy,
     response_function_logpdf,
+    response_function_precision,
     response_function_pref,
 )
 from eci.voting import _vote_plurality, _vote_quadratic
@@ -24,6 +25,7 @@ BUILTIN_RESPONSE_FNS = [
     response_function_logpdf,
     response_function_pref,
     response_function_cross_entropy,
+    response_function_precision,
 ]
 
 
