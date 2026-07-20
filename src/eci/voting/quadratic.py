@@ -38,12 +38,16 @@ def _vote_quadratic(
         See :class:`~eci.voting.types.VoteResult` for the full
         field contract. QV adds ``credits_spent``.
     """
-    # Sample round 1 preferences.
-    _, softmax_probs, candidate_utilities, key = response_function(data, key)
+    _, vote_probabilities, candidate_utilities, allocation_key = response_function(
+        data,
+        key,
+    )
 
-    # Allocate credits → votes per (agent, candidate).
     votes_matrix, credits_spent = _compute_qv_allocation(
-        key, candidate_utilities, budget, num_votes=num_votes
+        allocation_key,
+        candidate_utilities,
+        budget,
+        num_votes=num_votes,
     )
     votes_per_candidate = jnp.sum(votes_matrix, axis=0)
     winner = jnp.argmax(votes_per_candidate)
@@ -53,7 +57,7 @@ def _vote_quadratic(
         "votes_matrix": votes_matrix,
         "votes_per_candidate": votes_per_candidate,
         "winner": winner,
-        "softmax": softmax_probs,
+        "softmax": vote_probabilities,
         "candidate_utilities": candidate_utilities,
         # QV-specific:
         "credits_spent": credits_spent,
@@ -64,29 +68,39 @@ def _vote_quadratic(
 
 
 # TODO: Implement different allocation strategies.
-def _gumbel_top_k(key, logits, k):
+def _gumbel_top_k(key, logits, selection_count):
     """Sample k distinct items per row with prob ∝ softmax(logits)."""
-    gumbel = -jnp.log(-jnp.log(jax.random.uniform(key, logits.shape)))
-    _, top_idx = jax.lax.top_k(logits + gumbel, k)
-    return jnp.sum(jax.nn.one_hot(top_idx, logits.shape[1]), axis=1)
+    gumbel_noise = -jnp.log(-jnp.log(jax.random.uniform(key, logits.shape)))
+    _, selected_indices = jax.lax.top_k(
+        logits + gumbel_noise,
+        selection_count,
+    )
+    return jnp.sum(
+        jax.nn.one_hot(selected_indices, logits.shape[1]),
+        axis=1,
+    )
 
 
 def _add_credit_jitter(credits, key, scale):
     """Add Gaussian jitter and clip to >= 0 so sqrt stays real."""
-    noise = jax.random.normal(key, credits.shape) * scale
-    return jnp.maximum(credits + noise, 0.0)
+    credit_jitter = jax.random.normal(key, credits.shape) * scale
+    return jnp.maximum(credits + credit_jitter, 0.0)
 
 
 def _normalize_credit_budget(credits, budget, fallback_weights):
     """Normalize each agent's non-negative credits to exactly ``budget``."""
-    totals = jnp.sum(credits, axis=1, keepdims=True)
-    fallback_totals = jnp.sum(fallback_weights, axis=1, keepdims=True)
-    normalized = jnp.where(
-        totals > 0,
-        credits / jnp.maximum(totals, 1e-12),
-        fallback_weights / jnp.maximum(fallback_totals, 1e-12),
+    credit_totals = jnp.sum(credits, axis=1, keepdims=True)
+    fallback_weight_totals = jnp.sum(
+        fallback_weights,
+        axis=1,
+        keepdims=True,
     )
-    return normalized * budget
+    normalized_weights = jnp.where(
+        credit_totals > 0,
+        credits / jnp.maximum(credit_totals, 1e-12),
+        fallback_weights / jnp.maximum(fallback_weight_totals, 1e-12),
+    )
+    return normalized_weights * budget
 
 
 def _credits_to_votes(credits):
@@ -114,26 +128,41 @@ def _compute_qv_allocation(key, utilities, budget, num_votes=5, noise_scale=0.05
     -------
     ``(votes_matrix, credits_spent)``, both shape (n_agents, n_cand).
     """
-    n_cand = utilities.shape[1]
+    candidate_count = utilities.shape[1]
 
     if num_votes is None:
         # Adaptive: distribute the full budget across all candidates by utility.
-        weights = jax.nn.softmax(utilities, axis=1)
-        jittered = _add_credit_jitter(
-            weights * budget, key, noise_scale * budget / n_cand
+        utility_weights = jax.nn.softmax(utilities, axis=1)
+        perturbed_credits = _add_credit_jitter(
+            utility_weights * budget,
+            key,
+            noise_scale * budget / candidate_count,
         )
-        credits = _normalize_credit_budget(jittered, budget, weights)
-        return _credits_to_votes(credits), credits
+        normalized_credits = _normalize_credit_budget(
+            perturbed_credits,
+            budget,
+            utility_weights,
+        )
+        return _credits_to_votes(normalized_credits), normalized_credits
 
-    num_votes = min(num_votes, n_cand)
+    num_votes = min(num_votes, candidate_count)
     gumbel_key, noise_key = jax.random.split(key)
-    picks = _gumbel_top_k(gumbel_key, utilities, num_votes)
-    picked_weights = picks * jax.nn.softmax(utilities, axis=1)
-    jittered = picks * _add_credit_jitter(
-        picked_weights * budget, noise_key, noise_scale * budget / num_votes
+    selected_candidates = _gumbel_top_k(gumbel_key, utilities, num_votes)
+    selected_utility_weights = selected_candidates * jax.nn.softmax(
+        utilities,
+        axis=1,
     )
-    credits = _normalize_credit_budget(jittered, budget, picks)
-    return _credits_to_votes(credits), credits
+    perturbed_credits = selected_candidates * _add_credit_jitter(
+        selected_utility_weights * budget,
+        noise_key,
+        noise_scale * budget / num_votes,
+    )
+    normalized_credits = _normalize_credit_budget(
+        perturbed_credits,
+        budget,
+        selected_candidates,
+    )
+    return _credits_to_votes(normalized_credits), normalized_credits
 
 
 # Backward-compatible alias for code written before the allocation stopped being

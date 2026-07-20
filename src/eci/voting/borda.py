@@ -34,15 +34,20 @@ def _vote_borda(
         See :class:`~eci.voting.types.VoteResult`. ``votes_matrix`` holds the
         per-(agent, candidate) Borda points.
     """
-    _, softmax, candidate_utilities, _key = response_function(data, key)
+    _, vote_probabilities, candidate_utilities, _ = response_function(data, key)
 
     # Borda points per (agent, candidate) = number of candidates it strictly
     # outranks plus half a point per tied peer. This is the average rank and
     # avoids introducing candidate-index bias when utilities are equal.
-    pairwise = candidate_utilities[:, :, None] - candidate_utilities[:, None, :]
-    lower = jnp.sum(pairwise > 0, axis=-1)
-    tied_peers = jnp.sum(pairwise == 0, axis=-1) - 1
-    votes_matrix = lower + 0.5 * tied_peers
+    pairwise_utility_differences = (
+        candidate_utilities[:, :, None] - candidate_utilities[:, None, :]
+    )
+    outranked_candidate_count = jnp.sum(
+        pairwise_utility_differences > 0,
+        axis=-1,
+    )
+    tied_peer_count = jnp.sum(pairwise_utility_differences == 0, axis=-1) - 1
+    votes_matrix = outranked_candidate_count + 0.5 * tied_peer_count
     votes_per_candidate = jnp.sum(votes_matrix, axis=0)
     winner = jnp.argmax(votes_per_candidate)
 
@@ -51,7 +56,7 @@ def _vote_borda(
         "votes_matrix": votes_matrix,
         "votes_per_candidate": votes_per_candidate,
         "winner": winner,
-        "softmax": softmax,
+        "softmax": vote_probabilities,
         "candidate_utilities": candidate_utilities,
         # Legacy alias — will be removed in v0.2:
         "votes": votes_per_candidate,

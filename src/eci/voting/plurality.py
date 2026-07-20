@@ -32,20 +32,26 @@ def _vote_plurality(
     """
     # TODO: re-enable runoff (top-2) voting; the prototype lives in the git
     # history (commit before this refactor). Open an issue to track it.
-    votes, softmax, candidate_utilities, _key = response_function(data, key)
-    n_cand = candidate_utilities.shape[1]
+    selected_candidates, vote_probabilities, candidate_utilities, _ = response_function(
+        data, key
+    )
+    candidate_count = candidate_utilities.shape[1]
 
-    votes_matrix = jax.nn.one_hot(votes, n_cand, dtype=jnp.int32)
+    votes_matrix = jax.nn.one_hot(
+        selected_candidates,
+        candidate_count,
+        dtype=jnp.int32,
+    )
     votes_per_candidate = jnp.sum(votes_matrix, axis=0)
-    winner = _find_winner(votes, n_cand)
+    winner = _find_winner(selected_candidates, candidate_count)
 
     return {
         # Uniform fields (preferred):
         "votes_matrix": votes_matrix,
         "votes_per_candidate": votes_per_candidate,
         "winner": winner,
-        "softmax": softmax,
+        "softmax": vote_probabilities,
         "candidate_utilities": candidate_utilities,
         # Legacy (per-agent indices) — will be removed in v0.2:
-        "votes": votes,
+        "votes": selected_candidates,
     }
