@@ -93,13 +93,12 @@ def _get_expected_future_belief_gap(
     cand_precision: jnp.ndarray,
 ) -> jnp.ndarray:
     """Compute KL(Future_Belief || Preferences) using precision-weighted combination."""
-    # Broadcast all distributions to (n_agents, n_candidates, n_dimensions).
-    belief_means_by_candidate = beliefs_mean[:, None, :]
-    belief_precisions_by_candidate = beliefs_precision[:, None, :]
-    candidate_means_by_agent = cand_mean[None, :, :]
-    candidate_precisions_by_agent = cand_precision[None, :, :]
-    preference_means_by_candidate = pref_mean[:, None, :]
-    preference_precisions_by_candidate = pref_precision[:, None, :]
+    # broadcasting: (n_agents, n_candidates, n_dims)
+    future_mean, future_prec = _fuse_belief_candidate(
+        beliefs_mean, beliefs_precision, cand_mean, cand_precision
+    )
+    p_mean = pref_mean[:, None, :]
+    p_prec = pref_precision[:, None, :]
 
     future_precision = belief_precisions_by_candidate + candidate_precisions_by_agent
     future_mean = (
