@@ -8,6 +8,7 @@ from matplotlib.animation import FuncAnimation
 matplotlib.use("Agg")
 
 from eci.plots import (
+    _bootstrap_proportion_ci,
     animate_belief_trajectory,
     compute_vote_shares,
     plot_belief_trajectory,
@@ -16,6 +17,9 @@ from eci.plots import (
     plot_vote_shares,
     plot_voting_metrics,
     plot_voting_system_comparison,
+    plot_winner_distribution,
+    plot_winner_distribution_grouped,
+    plurality_results_to_share_df,
 )
 
 
@@ -190,6 +194,50 @@ class TestPlots:
         assert isinstance(fig, plt.Figure)
         assert axis.get_xticklabels()[0].get_text() == "C0"
         assert "2 simulations" in axis.get_title()
+
+    def test_plurality_results_to_share_frame(self):
+        """Two-round plurality results become labeled candidate shares."""
+        vote_shares = plurality_results_to_share_df(
+            {
+                "vote_round_1": np.array([[0, 0, 1]]),
+                "vote_final_round_2": np.array([[0, 1, 1]]),
+            },
+            n_candidates=2,
+        )
+
+        assert len(vote_shares) == 4
+        candidate_zero_round_one = vote_shares[
+            (vote_shares["candidate"] == "C0") & (vote_shares["round"] == "Round 1")
+        ]
+        assert candidate_zero_round_one.iloc[0]["share"] == pytest.approx(2 / 3)
+
+    def test_winner_distribution_plots(self):
+        """Single and grouped winner plots render candidate bars."""
+        winners = np.array([0, 0, 1, 1])
+        point_estimates, lower_bounds, upper_bounds = _bootstrap_proportion_ci(
+            winners,
+            n_candidates=2,
+            n_boot=100,
+            seed=1,
+        )
+        single_figure, single_axis = plot_winner_distribution(
+            winners,
+            n_candidates=2,
+            n_boot=100,
+        )
+        grouped_figure, grouped_axis = plot_winner_distribution_grouped(
+            {"First": winners, "Second": winners[::-1]},
+            n_candidates=2,
+            n_boot=100,
+        )
+
+        assert np.allclose(point_estimates, [0.5, 0.5])
+        assert np.all(lower_bounds <= point_estimates)
+        assert np.all(point_estimates <= upper_bounds)
+        assert isinstance(single_figure, plt.Figure)
+        assert len(single_axis.patches) == 2
+        assert isinstance(grouped_figure, plt.Figure)
+        assert len(grouped_axis.patches) == 4
 
     def test_plot_metrics_empty_data(self):
         """Ensure function handles empty DataFrame without crashing."""
