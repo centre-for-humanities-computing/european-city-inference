@@ -3,12 +3,13 @@ from typing import Optional
 import jax
 import jax.numpy as jnp
 
+from eci.decision.types import ElectionData
 from eci.voting.types import VoteResult
 
 
 # TODO: Allow positive and negative
 def _vote_quadratic(
-    data,
+    data: ElectionData,
     response_function,
     key,
     *args,

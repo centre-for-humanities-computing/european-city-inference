@@ -1,11 +1,12 @@
-from typing import Optional, Protocol, Tuple, runtime_checkable
+from typing import Optional, Protocol, runtime_checkable
 
 import jax.numpy as jnp
 from jax.scipy.stats import norm
 from jax.typing import ArrayLike
 
 from eci.decision.sampling import _sample_from_utilities
-from eci.decision.scoring import score_normalized
+from eci.decision.scoring import ScoringFn, score_normalized
+from eci.decision.types import ElectionData, ResponseResult
 from eci.decision.utilities import (
     _compute_candidate_utilities,
     _get_belief_preference_gap,
@@ -47,16 +48,22 @@ class ResponseFunction(Protocol):
 
     def __call__(
         self,
-        data: dict,
+        data: ElectionData,
         key: ArrayLike,
         mask: Optional[ArrayLike] = None,
-    ) -> Tuple[ArrayLike, ArrayLike, ArrayLike, ArrayLike]:
+    ) -> ResponseResult:
         """Sample a vote per agent; see the class docstring for the contract."""
         ...
 
 
 # TODO: Maybe give full data parameter instead of dataframe
-def response_function(data, key, mask=None, *args, **kwargs):
+def response_function(
+    data: ElectionData,
+    key: ArrayLike,
+    mask: Optional[ArrayLike] = None,
+    *args,
+    **kwargs,
+) -> ResponseResult:
     """Sample one vote per agent using normalised KL-based utilities.
 
     Parameters
@@ -80,7 +87,13 @@ def response_function(data, key, mask=None, *args, **kwargs):
 
 
 # TODO: Maybe give full data parameter instead of dataframe
-def response_function_random(data, key, mask=None, *args, **kwargs):
+def response_function_random(
+    data: ElectionData,
+    key: ArrayLike,
+    mask: Optional[ArrayLike] = None,
+    *args,
+    **kwargs,
+) -> ResponseResult:
     """Sample one vote uniformly at random from the candidate list.
 
     Parameters
@@ -106,7 +119,13 @@ def response_function_random(data, key, mask=None, *args, **kwargs):
 
 
 # TODO: Maybe give full data parameter instead of dataframe
-def response_function_logpdf(data, key, mask=None, *args, **kwargs):
+def response_function_logpdf(
+    data: ElectionData,
+    key: ArrayLike,
+    mask: Optional[ArrayLike] = None,
+    *args,
+    **kwargs,
+) -> ResponseResult:
     """Sample one vote per agent using Gaussian log-pdf under preferences.
 
     Parameters
@@ -140,7 +159,13 @@ def response_function_logpdf(data, key, mask=None, *args, **kwargs):
 
 
 # TODO: Maybe give full data parameter instead of dataframe
-def response_function_pref(data, key, mask=None, *args, **kwargs):
+def response_function_pref(
+    data: ElectionData,
+    key: ArrayLike,
+    mask: Optional[ArrayLike] = None,
+    *args,
+    **kwargs,
+) -> ResponseResult:
     """Sample one vote per agent using negative KL(pref || candidate).
 
     Parameters
@@ -172,7 +197,13 @@ def response_function_pref(data, key, mask=None, *args, **kwargs):
 
 
 # TODO: Maybe give full data parameter instead of dataframe
-def response_function_cross_entropy(data, key, mask=None, *args, **kwargs):
+def response_function_cross_entropy(
+    data: ElectionData,
+    key: ArrayLike,
+    mask: Optional[ArrayLike] = None,
+    *args,
+    **kwargs,
+) -> ResponseResult:
     """Sample one vote per agent using negative cross-entropy H(candidate, pref).
 
     The cross-entropy counterpart of :func:`response_function_pref`: it scores
@@ -209,7 +240,13 @@ def response_function_cross_entropy(data, key, mask=None, *args, **kwargs):
 
 
 # TODO: Maybe give full data parameter instead of dataframe
-def response_function_precision(data, key, mask=None, *args, **kwargs):
+def response_function_precision(
+    data: ElectionData,
+    key: ArrayLike,
+    mask: Optional[ArrayLike] = None,
+    *args,
+    **kwargs,
+) -> ResponseResult:
     r"""Sample one vote per agent with a **precision-weighted softmax**.
 
     Parameters
@@ -243,13 +280,13 @@ def response_function_precision(data, key, mask=None, *args, **kwargs):
 # TODO: Maybe give full data parameter instead of dataframe
 # TODO: Split the function
 def response_function_bayesian(
-    data: dict,
+    data: ElectionData,
     key: ArrayLike,
     mask: Optional[ArrayLike] = None,
     *args,
-    scoring_fn=score_normalized,
+    scoring_fn: ScoringFn = score_normalized,
     **kwargs,
-) -> Tuple[ArrayLike, ArrayLike, ArrayLike, ArrayLike]:
+) -> ResponseResult:
     """Sample one vote per agent using Bayesian fusion of beliefs and candidates.
 
     Unlike standard response functions that compare preferences directly to

@@ -1,9 +1,12 @@
 import jax.numpy as jnp
 
+from eci.decision.types import ElectionData
 from eci.voting.types import VoteResult
 
 
-def _vote_borda(data, response_function, key, *args, **kwargs) -> VoteResult:
+def _vote_borda(
+    data: ElectionData, response_function, key, *args, **kwargs
+) -> VoteResult:
     """Perform Borda count voting.
 
     Each voter ranks the candidates by utility; a candidate scores

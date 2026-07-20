@@ -1,6 +1,8 @@
 import jax.numpy as jnp
 from jax.typing import ArrayLike
 
+from eci.decision.types import ElectionData
+
 
 def kl_divergence(
     mean_belief: ArrayLike,
@@ -93,7 +95,7 @@ def get_voter_trajectory_data(env, voter_id: int, pref_idx: int = 0):
     }
 
 
-def _extract_env_data_vectorized(env):
+def _extract_env_data_vectorized(env) -> ElectionData:
     """Extract per-agent belief / preference / candidate arrays from an env.
 
     Returns the canonical ``data`` dict that every voting rule and

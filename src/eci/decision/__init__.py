@@ -15,6 +15,7 @@ from eci.decision.scoring import (
     score_normalized,
     score_product,
 )
+from eci.decision.types import ElectionData, GaussianParameters, ResponseResult
 from eci.decision.utilities import (
     _compute_candidate_utilities,
     _get_belief_preference_gap,
@@ -29,6 +30,10 @@ __all__ = [
     "score_absolute",
     "score_inverted",
     "score_product",
+    # Shared data contracts
+    "GaussianParameters",
+    "ElectionData",
+    "ResponseResult",
     # Utilities
     "_compute_candidate_utilities",
     "_get_belief_preference_gap",

@@ -2,6 +2,7 @@ import jax.numpy as jnp
 from jax.typing import ArrayLike
 
 from eci.decision.scoring import ScoringFn, score_normalized
+from eci.decision.types import ElectionData
 from eci.utils import cross_entropy, kl_divergence
 
 
@@ -92,7 +93,7 @@ def _get_expected_future_belief_gap(
 
 
 def _compute_candidate_utilities(
-    data: dict,
+    data: ElectionData,
     scoring_fn: ScoringFn = score_normalized,
 ) -> tuple[ArrayLike, ArrayLike, ArrayLike]:
     """Evaluate per-agent utility score for each candidate.

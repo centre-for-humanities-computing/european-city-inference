@@ -9,7 +9,7 @@ import jax
 import pandas as pd
 from matplotlib.figure import Figure
 
-from eci.decision import response_function
+from eci.decision import ElectionData, response_function
 from eci.environment import EnvConfig, Environment
 from eci.metrics import batch_compute_metrics
 from eci.plots import plot_belief_trajectory, plot_preference, plot_voting_metrics
@@ -72,7 +72,7 @@ def _parse_args() -> argparse.Namespace:
 
 def _run_voting_system(
     env: Environment,
-    data: dict,
+    data: ElectionData,
     run: VotingSystemRun,
     n_simulations: int,
 ) -> pd.DataFrame:

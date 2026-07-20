@@ -1,11 +1,14 @@
 import jax
 import jax.numpy as jnp
 
+from eci.decision.types import ElectionData
 from eci.voting.types import VoteResult
 from eci.voting.utils import _find_winner
 
 
-def _vote_plurality(data, response_function, key, *args, **kwargs) -> VoteResult:
+def _vote_plurality(
+    data: ElectionData, response_function, key, *args, **kwargs
+) -> VoteResult:
     """Perform plurality voting.
 
     Each voter casts one vote (sampled by ``response_function``); the

@@ -7,6 +7,7 @@ import tqdm
 from jax.tree_util import tree_map
 
 from eci.agents import Agent, Candidate, Voter
+from eci.decision.types import ElectionData
 from eci.perceptual import PerceptualModel
 from eci.population import Population, PopulationConfig
 from eci.world import World
@@ -208,7 +209,7 @@ class Environment:
     def run_n_simulation(
         self,
         func,
-        data,
+        data: ElectionData,
         response_function,
         key,
         n_simulations: int,
@@ -346,11 +347,11 @@ class Environment:
 
     @staticmethod
     def _data_at_timestep(
-        base_data,
+        base_data: ElectionData,
         belief_means: jax.Array,
         belief_precisions: jax.Array,
         timestep: int,
-    ) -> dict:
+    ) -> ElectionData:
         """Combine fixed election data with beliefs from one timestep."""
         return {
             "beliefs": {
@@ -363,7 +364,7 @@ class Environment:
 
     @staticmethod
     def _run_election_batch(
-        timestep_data,
+        timestep_data: ElectionData,
         response_function,
         voting_function,
         simulation_keys: jax.Array,
