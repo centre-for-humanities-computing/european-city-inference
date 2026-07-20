@@ -8,6 +8,7 @@ matplotlib.use("Agg")
 
 from eci.plots import (
     plot_belief_trajectory,
+    plot_belief_vote_evolution,
     plot_preference,
     plot_vote_shares,
     plot_voting_metrics,
@@ -93,6 +94,29 @@ class TestPlots:
 
         assert len(ax_main.collections) > 0
         assert len(ax_main.lines) > 0
+
+    def test_plot_belief_vote_evolution(self):
+        """Verify the combined plot labels and renders both vote heatmaps."""
+        steps = 5
+        fig, axes = plot_belief_vote_evolution(
+            expected_mean=np.linspace(0, 1, steps),
+            expected_precision=np.ones(steps),
+            observations=np.linspace(0.1, 0.9, steps),
+            preference_params=(0.5, 10.0),
+            plurality_matrix=np.full((2, steps), 0.5),
+            quadratic_matrix=np.full((2, steps), 0.25),
+            candidate_labels=["North", "South"],
+            shock_t=2,
+        )
+
+        belief_axis, _, plurality_axis, quadratic_axis = axes
+        assert isinstance(fig, plt.Figure)
+        assert (
+            belief_axis.get_title(loc="left") == "Belief trajectory and vote evolution"
+        )
+        assert plurality_axis.get_yticklabels()[0].get_text() == "North"
+        assert len(plurality_axis.images) == 1
+        assert len(quadratic_axis.images) == 1
 
     def test_plot_voting_metrics(self):
         """Verifies that plot_voting_metrics generates the two subplots."""

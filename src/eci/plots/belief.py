@@ -1,11 +1,13 @@
 """Belief trajectory plots (single voter)."""
 
-from typing import Any, Optional, Tuple, cast
+from dataclasses import dataclass
+from typing import Any, Optional, Sequence, Tuple, cast
 
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib import gridspec
 from matplotlib.animation import FuncAnimation
+from numpy.typing import ArrayLike
 from scipy.stats import norm
 
 
@@ -87,24 +89,112 @@ def plot_belief_trajectory(
     return fig, ax_main, ax_density
 
 
+@dataclass(frozen=True)
+class _BeliefVoteAxes:
+    """Axes used by the combined belief and vote-evolution figure."""
+
+    belief: plt.Axes
+    density: plt.Axes
+    plurality: plt.Axes
+    plurality_colorbar: plt.Axes
+    quadratic: plt.Axes
+    quadratic_colorbar: plt.Axes
+
+
+@dataclass(frozen=True)
+class _VoteHeatmap:
+    """Data and labels for one vote-evolution heatmap."""
+
+    matrix: np.ndarray
+    axis_label: str
+    colorbar_label: str
+
+
+@dataclass(frozen=True)
+class _VoteHeatmapStyle:
+    """Shared presentation settings for vote-evolution heatmaps."""
+
+    candidate_labels: Sequence[str]
+    shock_timestep: Optional[int]
+    color_map: str
+    maximum_value: float
+
+
+def _create_belief_vote_axes(
+    figure_size: Tuple[float, float],
+) -> tuple[plt.Figure, _BeliefVoteAxes]:
+    """Create the axes for a belief trajectory and two vote heatmaps."""
+    figure = plt.figure(figsize=figure_size, constrained_layout=True)
+    grid = gridspec.GridSpec(
+        3,
+        2,
+        figure=figure,
+        height_ratios=[2.4, 1, 1],
+        width_ratios=[8, 1],
+        wspace=0.03,
+    )
+    belief_axis = figure.add_subplot(grid[0, 0])
+    return figure, _BeliefVoteAxes(
+        belief=belief_axis,
+        density=figure.add_subplot(grid[0, 1], sharey=belief_axis),
+        plurality=figure.add_subplot(grid[1, 0], sharex=belief_axis),
+        plurality_colorbar=figure.add_subplot(grid[1, 1]),
+        quadratic=figure.add_subplot(grid[2, 0], sharex=belief_axis),
+        quadratic_colorbar=figure.add_subplot(grid[2, 1]),
+    )
+
+
+def _plot_vote_heatmap(
+    figure: plt.Figure,
+    axis: plt.Axes,
+    colorbar_axis: plt.Axes,
+    heatmap: _VoteHeatmap,
+    style: _VoteHeatmapStyle,
+) -> None:
+    """Draw one candidate-by-timestep vote heatmap."""
+    candidate_count, timestep_count = heatmap.matrix.shape
+    image = axis.imshow(
+        heatmap.matrix,
+        aspect="auto",
+        cmap=style.color_map,
+        vmin=0,
+        vmax=style.maximum_value,
+        extent=[0, timestep_count, -0.5, candidate_count - 0.5],
+        origin="lower",
+        interpolation="nearest",
+    )
+    axis.set_yticks(range(candidate_count))
+    axis.set_yticklabels(style.candidate_labels)
+    axis.set_ylabel(heatmap.axis_label)
+    if style.shock_timestep is not None:
+        axis.axvline(
+            style.shock_timestep,
+            color="cyan",
+            ls="--",
+            lw=0.8,
+            alpha=0.6,
+        )
+    figure.colorbar(image, cax=colorbar_axis, label=heatmap.colorbar_label)
+
+
 def plot_belief_vote_evolution(
-    expected_mean,
-    expected_precision,
-    observations,
-    preference_params,
-    plurality_matrix,
-    quadratic_matrix,
-    candidate_labels=None,
-    shock_t=None,
-    title="Belief trajectory and vote evolution",
-    plurality_label="Plurality\nP(vote)",
-    quadratic_label="Quadratic\nvote share",
-    plurality_cbar="softmax prob",
-    quadratic_cbar="avg vote share",
-    vmax=1.0,
-    cmap="magma",
-    figsize=(13, 7.5),
-):
+    expected_mean: ArrayLike,
+    expected_precision: ArrayLike,
+    observations: ArrayLike,
+    preference_params: Tuple[float, float],
+    plurality_matrix: ArrayLike,
+    quadratic_matrix: ArrayLike,
+    candidate_labels: Optional[Sequence[str]] = None,
+    shock_t: Optional[int] = None,
+    title: str = "Belief trajectory and vote evolution",
+    plurality_label: str = "Plurality\nP(vote)",
+    quadratic_label: str = "Quadratic\nvote share",
+    plurality_cbar: str = "softmax prob",
+    quadratic_cbar: str = "avg vote share",
+    vmax: float = 1.0,
+    cmap: str = "magma",
+    figsize: Tuple[float, float] = (13, 7.5),
+) -> tuple[plt.Figure, tuple[plt.Axes, plt.Axes, plt.Axes, plt.Axes]]:
     """Stacked figure: a belief trajectory above two vote-distribution heatmaps.
 
     The top panel reuses :func:`plot_belief_trajectory` (belief mean ± 95% CI
@@ -145,69 +235,47 @@ def plot_belief_vote_evolution(
     -------
     fig, (ax_belief, ax_density, ax_plurality, ax_quadratic)
     """
-    expected_mean = np.asarray(expected_mean).squeeze()
-    plurality_matrix = np.asarray(plurality_matrix)
-    quadratic_matrix = np.asarray(quadratic_matrix)
-    n_cand, n_steps = plurality_matrix.shape
+    belief_means = np.asarray(expected_mean).squeeze()
+    plurality_votes = np.asarray(plurality_matrix)
+    quadratic_votes = np.asarray(quadratic_matrix)
+    candidate_count = plurality_votes.shape[0]
     if candidate_labels is None:
-        candidate_labels = [f"C{i}" for i in range(n_cand)]
+        candidate_labels = [
+            f"C{candidate_index}" for candidate_index in range(candidate_count)
+        ]
 
-    fig = plt.figure(figsize=figsize, constrained_layout=True)
-    gs = gridspec.GridSpec(
-        3,
-        2,
-        figure=fig,
-        height_ratios=[2.4, 1, 1],
-        width_ratios=[8, 1],
-        wspace=0.03,
-    )
-    ax_b = fig.add_subplot(gs[0, 0])
-    ax_den = fig.add_subplot(gs[0, 1], sharey=ax_b)
-    ax_pl = fig.add_subplot(gs[1, 0], sharex=ax_b)
-    cax_pl = fig.add_subplot(gs[1, 1])
-    ax_qv = fig.add_subplot(gs[2, 0], sharex=ax_b)
-    cax_qv = fig.add_subplot(gs[2, 1])
-
-    # --- Top: belief trajectory + side density ---------------------------
+    figure, axes = _create_belief_vote_axes(figsize)
     plot_belief_trajectory(
-        expected_mean=expected_mean,
+        expected_mean=belief_means,
         expected_precision=np.asarray(expected_precision).squeeze(),
         observations=np.asarray(observations).squeeze(),
         preference_params=preference_params,
-        axes=(ax_b, ax_den),
+        axes=(axes.belief, axes.density),
     )
     if shock_t is not None:
-        ax_b.axvline(shock_t, color="#444", ls="--", lw=1, alpha=0.45)
-    # Replace the helper's centred "Belief Trajectory" title with our own.
-    ax_b.set_title("")
-    ax_b.set_title(title, loc="left", fontweight="bold", pad=10)
-    ax_b.set_xlabel("")
+        axes.belief.axvline(shock_t, color="#444", ls="--", lw=1, alpha=0.45)
+    axes.belief.set_title("")
+    axes.belief.set_title(title, loc="left", fontweight="bold", pad=10)
+    axes.belief.set_xlabel("")
 
-    # --- Two vote-distribution heatmaps (shared time axis & colour scale) -
-    extent = [0, n_steps, -0.5, n_cand - 0.5]
-    for ax, cax, mat, ylab, cbar in [
-        (ax_pl, cax_pl, plurality_matrix, plurality_label, plurality_cbar),
-        (ax_qv, cax_qv, quadratic_matrix, quadratic_label, quadratic_cbar),
-    ]:
-        im = ax.imshow(
-            mat,
-            aspect="auto",
-            cmap=cmap,
-            vmin=0,
-            vmax=vmax,
-            extent=extent,
-            origin="lower",
-            interpolation="nearest",
-        )
-        ax.set_yticks(range(n_cand))
-        ax.set_yticklabels(candidate_labels)
-        ax.set_ylabel(ylab)
-        if shock_t is not None:
-            ax.axvline(shock_t, color="cyan", ls="--", lw=0.8, alpha=0.6)
-        fig.colorbar(im, cax=cax, label=cbar)
-    ax_qv.set_xlabel("Time step")
+    heatmap_style = _VoteHeatmapStyle(candidate_labels, shock_t, cmap, vmax)
+    _plot_vote_heatmap(
+        figure,
+        axes.plurality,
+        axes.plurality_colorbar,
+        _VoteHeatmap(plurality_votes, plurality_label, plurality_cbar),
+        heatmap_style,
+    )
+    _plot_vote_heatmap(
+        figure,
+        axes.quadratic,
+        axes.quadratic_colorbar,
+        _VoteHeatmap(quadratic_votes, quadratic_label, quadratic_cbar),
+        heatmap_style,
+    )
+    axes.quadratic.set_xlabel("Time step")
 
-    return fig, (ax_b, ax_den, ax_pl, ax_qv)
+    return figure, (axes.belief, axes.density, axes.plurality, axes.quadratic)
 
 
 def animate_belief_trajectory(
