@@ -50,13 +50,13 @@ def _get_pref_candidate_cross_entropy(
     KL). Equals KL plus the candidate's entropy, so it also penalises diffuse
     (low-precision) candidates.
     """
-    ce_per_dim = cross_entropy(
+    cross_entropy_per_dimension = cross_entropy(
         cand_mean[None, :, :],
         cand_precision[None, :, :],
         pref_mean[:, None, :],
         pref_precision[:, None, :],
     )
-    return jnp.sum(ce_per_dim, axis=-1)
+    return jnp.sum(cross_entropy_per_dimension, axis=-1)
 
 
 def _get_expected_future_belief_gap(
@@ -68,27 +68,27 @@ def _get_expected_future_belief_gap(
     cand_precision: jnp.ndarray,
 ) -> jnp.ndarray:
     """Compute KL(Future_Belief || Preferences) using precision-weighted combination."""
-    # broadcasting: (n_agents, n_candidates, n_dims)
-    b_mean = beliefs_mean[:, None, :]
-    b_prec = beliefs_precision[:, None, :]
-    c_mean = cand_mean[None, :, :]
-    c_prec = cand_precision[None, :, :]
-    p_mean = pref_mean[:, None, :]
-    p_prec = pref_precision[:, None, :]
+    # Broadcast all distributions to (n_agents, n_candidates, n_dimensions).
+    belief_means_by_candidate = beliefs_mean[:, None, :]
+    belief_precisions_by_candidate = beliefs_precision[:, None, :]
+    candidate_means_by_agent = cand_mean[None, :, :]
+    candidate_precisions_by_agent = cand_precision[None, :, :]
+    preference_means_by_candidate = pref_mean[:, None, :]
+    preference_precisions_by_candidate = pref_precision[:, None, :]
 
-    # Compute the new belief parameters (Bayesian Update)
-    future_prec = b_prec + c_prec
-    future_mean = (b_mean * b_prec + c_mean * c_prec) / future_prec
+    future_precision = belief_precisions_by_candidate + candidate_precisions_by_agent
+    future_mean = (
+        belief_means_by_candidate * belief_precisions_by_candidate
+        + candidate_means_by_agent * candidate_precisions_by_agent
+    ) / future_precision
 
-    # Compute KL(Future_Belief || Preference) per dimension
     gap_per_dim = kl_divergence(
         future_mean,
-        future_prec,
-        p_mean,
-        p_prec,
+        future_precision,
+        preference_means_by_candidate,
+        preference_precisions_by_candidate,
     )
 
-    # Sum across dimensions
     return jnp.sum(gap_per_dim, axis=-1)
 
 
@@ -110,7 +110,7 @@ def _compute_candidate_utilities(
     Returns
     -------
     preference_score_per_agent : ArrayLike, shape (n_agents, n_candidates)
-    pref_candidate_gap         : ArrayLike, shape (n_agents, n_candidates)
+    preference_candidate_gap   : ArrayLike, shape (n_agents, n_candidates)
     belief_preference_gap      : ArrayLike, shape (n_agents,)
     """
     belief_preference_gap = _get_belief_preference_gap(
@@ -119,21 +119,19 @@ def _compute_candidate_utilities(
         data["preferences"]["mean"],
         data["preferences"]["precision"],
     )
-    pref_candidate_gap = _get_pref_candidate_gap(
+    preference_candidate_gap = _get_pref_candidate_gap(
         data["candidates"]["mean"],
         data["candidates"]["precision"],
         data["preferences"]["mean"],
         data["preferences"]["precision"],
     )
 
-    # For the expected future belief gap, we treat the candidate as if it were
-    # pref_future_belief_gap_gap = _get_expected_future_belief_gap(
-    #    data["beliefs"]["mean"],
-    #    data["beliefs"]["precision"],
-    #    data["preferences"]["mean"],
-    #    data["preferences"]["precision"],
-    #    data["candidates"]["mean"],
-    #    data["candidates"]["precision"],
-    # )
-    preference_score_per_agent = scoring_fn(belief_preference_gap, pref_candidate_gap)
-    return preference_score_per_agent, pref_candidate_gap, belief_preference_gap
+    preference_score_per_agent = scoring_fn(
+        belief_preference_gap,
+        preference_candidate_gap,
+    )
+    return (
+        preference_score_per_agent,
+        preference_candidate_gap,
+        belief_preference_gap,
+    )
