@@ -14,6 +14,110 @@ from numpy.typing import ArrayLike
 from scipy.stats import norm
 
 
+@dataclass(frozen=True)
+class _BeliefDensityData:
+    """Preference and final-belief densities for the side panel."""
+
+    axis_values: np.ndarray
+    preference: np.ndarray
+    final_belief: np.ndarray
+    preference_mean: float
+
+
+def _calculate_belief_density_data(
+    main_axis: plt.Axes,
+    expected_mean: np.ndarray,
+    expected_precision: np.ndarray,
+    preference_params: Tuple[float, float],
+) -> _BeliefDensityData:
+    """Calculate normalized preference and final-belief density curves."""
+    preference_mean = preference_params[0]
+    preference_standard_deviation = 1 / np.sqrt(preference_params[1])
+    visible_minimum, visible_maximum = main_axis.get_ylim()
+    density_axis_values = np.linspace(
+        min(
+            visible_minimum,
+            preference_mean - 4 * preference_standard_deviation,
+        ),
+        max(
+            visible_maximum,
+            preference_mean + 4 * preference_standard_deviation,
+        ),
+        500,
+    )
+    preference_density = norm.pdf(
+        density_axis_values,
+        loc=preference_mean,
+        scale=preference_standard_deviation,
+    )
+    final_belief_density = norm.pdf(
+        density_axis_values,
+        loc=expected_mean[-1],
+        scale=1.0 / np.sqrt(expected_precision[-1]),
+    )
+    density_peak = max(
+        preference_density.max(),
+        final_belief_density.max(),
+    )
+    if density_peak > 0:
+        preference_density = preference_density / density_peak * 0.9
+        final_belief_density = final_belief_density / density_peak * 0.9
+
+    return _BeliefDensityData(
+        axis_values=density_axis_values,
+        preference=preference_density,
+        final_belief=final_belief_density,
+        preference_mean=preference_mean,
+    )
+
+
+def _plot_belief_density(
+    density_axis: plt.Axes,
+    density_data: _BeliefDensityData,
+) -> None:
+    """Draw preference and final-belief densities on the side panel."""
+    density_axis.fill_betweenx(
+        density_data.axis_values,
+        0,
+        density_data.preference,
+        color="gray",
+        alpha=0.2,
+    )
+    density_axis.plot(
+        density_data.preference,
+        density_data.axis_values,
+        c="#555555",
+        lw=1,
+        alpha=0.8,
+        label="Preference",
+    )
+    density_axis.axhline(
+        density_data.preference_mean,
+        c="k",
+        ls="--",
+        lw=1,
+        alpha=0.5,
+    )
+    density_axis.fill_betweenx(
+        density_data.axis_values,
+        0,
+        density_data.final_belief,
+        color="#D62728",
+        alpha=0.15,
+    )
+    density_axis.plot(
+        density_data.final_belief,
+        density_data.axis_values,
+        c="#D62728",
+        lw=1.5,
+        alpha=0.9,
+        label="Belief",
+    )
+    density_axis.set(xlim=(0, 1))
+    density_axis.legend(loc="upper right", fontsize=8, frameon=False)
+    density_axis.axis("off")
+
+
 def plot_belief_trajectory(
     expected_mean: np.ndarray,
     expected_precision: np.ndarray,
@@ -25,22 +129,18 @@ def plot_belief_trajectory(
 ) -> Tuple[plt.Figure, plt.Axes, plt.Axes]:
     """Plot a single voter's belief trajectory + side density panel."""
     time_steps = np.arange(len(observations))
-    ci_bound = 1.96 * (1 / np.sqrt(expected_precision))
-    target_mean, target_std = (
-        preference_params[0],
-        1 / np.sqrt(preference_params[1]),
-    )
+    confidence_bounds = 1.96 * (1 / np.sqrt(expected_precision))
 
     if axes is None:
-        fig = plt.figure(figsize=(8, 4))
-        gs = gridspec.GridSpec(1, 6, figure=fig, wspace=0.02)
-        ax_main = fig.add_subplot(gs[0, :-1])
-        ax_density = fig.add_subplot(gs[0, -1], sharey=ax_main)
+        figure = plt.figure(figsize=(8, 4))
+        grid = gridspec.GridSpec(1, 6, figure=figure, wspace=0.02)
+        main_axis = figure.add_subplot(grid[0, :-1])
+        density_axis = figure.add_subplot(grid[0, -1], sharey=main_axis)
     else:
-        ax_main, ax_density = axes
-        fig = cast(plt.Figure, ax_main.figure)
+        main_axis, density_axis = axes
+        figure = cast(plt.Figure, main_axis.figure)
 
-    ax_main.scatter(
+    main_axis.scatter(
         time_steps,
         observations,
         s=15,
@@ -48,48 +148,34 @@ def plot_belief_trajectory(
         alpha=0.4,
         label="Observations",
     )
-    ax_main.plot(expected_mean, c="#D62728", lw=2.5, label="Belief (Mean)")
-    ax_main.fill_between(
+    main_axis.plot(expected_mean, c="#D62728", lw=2.5, label="Belief (Mean)")
+    main_axis.fill_between(
         time_steps,
-        expected_mean - ci_bound,
-        expected_mean + ci_bound,
+        expected_mean - confidence_bounds,
+        expected_mean + confidence_bounds,
         color="#D62728",
         alpha=0.1,
         label="95% CI",
     )
 
     if ylim:
-        ax_main.set_ylim(ylim)
-    ax_main.set(title=f"Belief Trajectory {title_suffix}".strip(), xlabel="Time Step")
-    ax_main.legend(loc="upper left")
-    ax_main.grid(True, ls=":", alpha=0.6)
-
-    y_min, y_max = ax_main.get_ylim()
-    y_vals = np.linspace(
-        min(y_min, target_mean - 4 * target_std),
-        max(y_max, target_mean + 4 * target_std),
-        500,
+        main_axis.set_ylim(ylim)
+    main_axis.set(
+        title=f"Belief Trajectory {title_suffix}".strip(),
+        xlabel="Time Step",
     )
+    main_axis.legend(loc="upper left")
+    main_axis.grid(True, ls=":", alpha=0.6)
 
-    pref_pdf = norm.pdf(y_vals, loc=target_mean, scale=target_std)
-    belief_std_final = 1.0 / np.sqrt(expected_precision[-1])
-    belief_pdf = norm.pdf(y_vals, loc=expected_mean[-1], scale=belief_std_final)
+    density_data = _calculate_belief_density_data(
+        main_axis,
+        expected_mean,
+        expected_precision,
+        preference_params,
+    )
+    _plot_belief_density(density_axis, density_data)
 
-    peak = max(pref_pdf.max(), belief_pdf.max())
-    if peak > 0:
-        pref_pdf = pref_pdf / peak * 0.9
-        belief_pdf = belief_pdf / peak * 0.9
-
-    ax_density.fill_betweenx(y_vals, 0, pref_pdf, color="gray", alpha=0.2)
-    ax_density.plot(pref_pdf, y_vals, c="#555555", lw=1, alpha=0.8, label="Preference")
-    ax_density.axhline(target_mean, c="k", ls="--", lw=1, alpha=0.5)
-    ax_density.fill_betweenx(y_vals, 0, belief_pdf, color="#D62728", alpha=0.15)
-    ax_density.plot(belief_pdf, y_vals, c="#D62728", lw=1.5, alpha=0.9, label="Belief")
-    ax_density.set(xlim=(0, 1))
-    ax_density.legend(loc="upper right", fontsize=8, frameon=False)
-    ax_density.axis("off")
-
-    return fig, ax_main, ax_density
+    return figure, main_axis, density_axis
 
 
 @dataclass(frozen=True)
@@ -162,7 +248,7 @@ def _plot_vote_heatmap(
         cmap=style.color_map,
         vmin=0,
         vmax=style.maximum_value,
-        extent=[0, timestep_count, -0.5, candidate_count - 0.5],
+        extent=(0, timestep_count, -0.5, candidate_count - 0.5),
         origin="lower",
         interpolation="nearest",
     )
