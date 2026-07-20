@@ -82,6 +82,19 @@ class TestQuadraticVoting:
         # Credits should be non-negative (sqrt would fail otherwise).
         assert jnp.all(credits_spent >= 0.0)
 
+    @pytest.mark.parametrize("num_votes", [None, 2, 5])
+    def test_compute_sequential_qv_allocation_spends_full_budget(self, num_votes):
+        """Every allocation strategy must preserve each agent's credit budget."""
+        key = jax.random.PRNGKey(42)
+        candidate_utilities = jnp.zeros((2, 5))
+        budget = 100.0
+
+        _, credits_spent = _compute_sequential_qv_allocation(
+            key, candidate_utilities, budget, num_votes=num_votes
+        )
+
+        assert jnp.allclose(jnp.sum(credits_spent, axis=1), budget)
+
     def test_compute_sequential_qv_allocation_zero_budget(self):
         """Zero budget should yield zero votes and zero credits without NaNs."""
         key = jax.random.PRNGKey(42)

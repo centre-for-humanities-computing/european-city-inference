@@ -70,16 +70,22 @@ def _gumbel_top_k(key, logits, k):
     return jnp.sum(jax.nn.one_hot(top_idx, logits.shape[1]), axis=1)
 
 
-def _qv_credits_per_pick(utilities, budget, num_votes):
-    """Per-(agent, candidate) credit weight before pick mask."""
-    per_pick = budget / num_votes
-    return jax.nn.softmax(utilities, axis=1) * per_pick
-
-
 def _add_credit_jitter(credits, key, scale):
     """Add Gaussian jitter and clip to >= 0 so sqrt stays real."""
     noise = jax.random.normal(key, credits.shape) * scale
     return jnp.maximum(credits + noise, 0.0)
+
+
+def _normalize_credit_budget(credits, budget, fallback_weights):
+    """Normalize each agent's non-negative credits to exactly ``budget``."""
+    totals = jnp.sum(credits, axis=1, keepdims=True)
+    fallback_totals = jnp.sum(fallback_weights, axis=1, keepdims=True)
+    normalized = jnp.where(
+        totals > 0,
+        credits / jnp.maximum(totals, 1e-12),
+        fallback_weights / jnp.maximum(fallback_totals, 1e-12),
+    )
+    return normalized * budget
 
 
 def _credits_to_votes(credits):
@@ -113,15 +119,19 @@ def _compute_sequential_qv_allocation(
 
     if num_votes is None:
         # Adaptive: distribute the full budget across all candidates by utility.
-        weights = jax.nn.softmax(utilities, axis=1) * budget
-        credits = _add_credit_jitter(weights, key, noise_scale * budget / n_cand)
+        weights = jax.nn.softmax(utilities, axis=1)
+        jittered = _add_credit_jitter(
+            weights * budget, key, noise_scale * budget / n_cand
+        )
+        credits = _normalize_credit_budget(jittered, budget, weights)
         return _credits_to_votes(credits), credits
 
     num_votes = min(num_votes, n_cand)
-    weights = _qv_credits_per_pick(utilities, budget, num_votes)
     gumbel_key, noise_key = jax.random.split(key)
     picks = _gumbel_top_k(gumbel_key, utilities, num_votes)
-    credits = picks * _add_credit_jitter(
-        weights, noise_key, noise_scale * budget / num_votes
+    picked_weights = picks * jax.nn.softmax(utilities, axis=1)
+    jittered = picks * _add_credit_jitter(
+        picked_weights * budget, noise_key, noise_scale * budget / num_votes
     )
+    credits = _normalize_credit_budget(jittered, budget, picks)
     return _credits_to_votes(credits), credits
