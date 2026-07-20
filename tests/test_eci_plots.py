@@ -9,11 +9,13 @@ matplotlib.use("Agg")
 
 from eci.plots import (
     animate_belief_trajectory,
+    compute_vote_shares,
     plot_belief_trajectory,
     plot_belief_vote_evolution,
     plot_preference,
     plot_vote_shares,
     plot_voting_metrics,
+    plot_voting_system_comparison,
 )
 
 
@@ -157,6 +159,37 @@ class TestPlots:
         # Check titles to ensure correct plotting logic
         assert "reflect preferences" in ax_array[0].get_title()
         assert "satisfy the group" in ax_array[1].get_title()
+
+    def test_compute_vote_shares_from_vote_matrix(self):
+        """Vote matrices are normalized per simulation."""
+        results = {
+            "votes_matrix": np.array(
+                [
+                    [
+                        [1, 0],
+                        [0, 2],
+                    ]
+                ]
+            )
+        }
+
+        shares = compute_vote_shares(results, n_candidates=2)
+
+        assert shares.shape == (1, 2)
+        assert np.allclose(shares, [[1 / 3, 2 / 3]])
+
+    def test_plot_voting_system_comparison(self):
+        """Voting-system comparison labels candidates and returns its axis."""
+        fig, axis = plot_voting_system_comparison(
+            {
+                "Plurality": np.array([[0.75, 0.25], [0.5, 0.5]]),
+                "Quadratic": np.array([[0.5, 0.5], [0.25, 0.75]]),
+            }
+        )
+
+        assert isinstance(fig, plt.Figure)
+        assert axis.get_xticklabels()[0].get_text() == "C0"
+        assert "2 simulations" in axis.get_title()
 
     def test_plot_metrics_empty_data(self):
         """Ensure function handles empty DataFrame without crashing."""
