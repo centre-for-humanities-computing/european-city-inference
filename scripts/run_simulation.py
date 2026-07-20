@@ -1,10 +1,13 @@
 import argparse
 import json
 import os
+from dataclasses import dataclass
 from datetime import datetime
+from typing import Any, Callable, Mapping
 
 import jax
 import pandas as pd
+from matplotlib.figure import Figure
 
 from eci.decision import response_function
 from eci.environment import EnvConfig, Environment
@@ -19,10 +22,19 @@ from eci.voting import _vote_plurality, _vote_quadratic
 # from eci.voting.random_voting import _vote_uniform_random
 
 
-def main():
-    """Run multiple simulations of ECI voting systems and save results."""
+@dataclass(frozen=True)
+class VotingSystemRun:
+    """A named voting-system simulation with its dedicated PRNG key."""
+
+    name: str
+    voting_function: Callable
+    key: Any
+
+
+def _parse_args() -> argparse.Namespace:
+    """Parse command-line options for a simulation run."""
     parser = argparse.ArgumentParser(
-        description="Run an voting simulation with multiple iterations."
+        description="Run a voting simulation with multiple iterations."
     )
     parser.add_argument("--agents", type=int, default=100, help="Number of agents.")
     parser.add_argument(
@@ -55,7 +67,81 @@ def main():
         default="../figures",
         help="Directory to save the generated figures.",
     )
-    args = parser.parse_args()
+    return parser.parse_args()
+
+
+def _run_voting_system(
+    env: Environment,
+    data: dict,
+    run: VotingSystemRun,
+    n_simulations: int,
+) -> pd.DataFrame:
+    """Run one voting system and return its labeled metrics."""
+    print(f"Running {run.name} Voting")
+    simulation_results = env.run_n_simulation(
+        run.voting_function,
+        data,
+        response_function,
+        run.key,
+        n_simulations,
+    )
+    metrics = batch_compute_metrics(simulation_results)
+    metrics["voting_system"] = run.name
+    return metrics
+
+
+def _add_run_metadata(
+    metrics: pd.DataFrame,
+    args: argparse.Namespace,
+    run_id: str,
+) -> None:
+    """Attach run-level configuration fields to every metrics row."""
+    metrics["num_agents"] = args.agents
+    metrics["num_candidates"] = args.candidates
+    metrics["num_preferences"] = args.preferences
+    metrics["seed"] = args.seed
+    metrics["run_id"] = run_id
+
+
+def _save_outputs(
+    args: argparse.Namespace,
+    run_id: str,
+    metrics: pd.DataFrame,
+    figures: Mapping[str, Figure],
+) -> tuple[str, str]:
+    """Persist run metrics, configuration and figures."""
+    os.makedirs(args.out_dir, exist_ok=True)
+    os.makedirs(args.fig_dir, exist_ok=True)
+    csv_path = os.path.join(args.out_dir, f"{run_id}_metrics.csv")
+    json_path = os.path.join(args.out_dir, f"{run_id}_config.json")
+
+    for figure_name, figure in figures.items():
+        figure.savefig(
+            os.path.join(args.fig_dir, f"{run_id}_{figure_name}.png"),
+            dpi=150,
+            bbox_inches="tight",
+        )
+
+    metrics.to_csv(csv_path, index=False)
+    with open(json_path, "w", encoding="utf-8") as config_file:
+        json.dump(vars(args), config_file, indent=4)
+
+    return csv_path, json_path
+
+
+def _print_summary(metrics: pd.DataFrame, csv_path: str, json_path: str) -> None:
+    """Print saved paths and per-system averages."""
+    print("Simulation finished.")
+    print(f"Results saved to: {csv_path}")
+    print(f"Config saved to: {json_path}")
+    print("\nSummary:")
+    numeric_columns = metrics.select_dtypes(include="number").columns.tolist()
+    print(metrics.groupby("voting_system")[numeric_columns].mean())
+
+
+def main():
+    """Run multiple simulations of ECI voting systems and save results."""
+    args = _parse_args()
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     run_id = f"{args.run_name}_{timestamp}"
@@ -93,104 +179,35 @@ def main():
     fig_preference, _ = plot_preference(data)
 
     base_key = jax.random.PRNGKey(args.seed)
-    # TODO: re-add `key_rand` when random voting is restored.
     key_quad, key_plur = jax.random.split(base_key, 2)
 
-    # plurality
-    print("Running Plurality Voting")
-    sim_plurality = env.run_n_simulation(
-        _vote_plurality, data, response_function, key_plur, args.simulations
-    )
-    metrics_plurality = batch_compute_metrics(sim_plurality)
-    metrics_plurality["voting_system"] = "Plurality"
-
-    # TODO: restore strategic plurality voting.
-    # print("Running Strategic Plurality Voting")
-    # sim_plurality_strat = env.run_n_simulation(
-    #     strategic_vote, data, response_function, key_plur, args.simulations
-    # )
-    # metrics_plurality_strat = batch_compute_metrics(sim_plurality_strat)
-    # metrics_plurality_strat["voting_system"] = "Plur_Strat"
-
-    # quadratic
-    print("Running Quadratic Voting")
-    sim_qv = env.run_n_simulation(
-        _vote_quadratic, data, response_function, key_quad, args.simulations
-    )
-    metrics_qv = batch_compute_metrics(sim_qv)
-    metrics_qv["voting_system"] = "Quadratic"
-
-    # TODO: restore strategic quadratic voting.
-    # print("Running Strategic Quadratic Voting")
-    # sim_qv_strat = env.run_n_simulation(
-    #     strategic_quadratic_vote, data, response_function, key_quad, args.simulations
-    # )
-    # metrics_qv_strat = batch_compute_metrics(sim_qv_strat)
-    # metrics_qv_strat["voting_system"] = "Quad_Strat"
-
-    # TODO: restore uniform random voting.
-    # print("Running Uniform Random Voting")
-    # sim_rdm = env.run_n_simulation(
-    #     _vote_uniform_random, data, response_function, key_rand, args.simulations
-    # )
-    # metrics_rdm = batch_compute_metrics(sim_rdm)
-    # metrics_rdm["voting_system"] = "Rdm_Uni"
+    voting_systems = [
+        VotingSystemRun("Plurality", _vote_plurality, key_plur),
+        VotingSystemRun("Quadratic", _vote_quadratic, key_quad),
+    ]
+    metrics_by_system = [
+        _run_voting_system(env, data, run, args.simulations) for run in voting_systems
+    ]
 
     # Combine all metrics into one DataFrame
-    combined_df = pd.concat(
-        [
-            metrics_plurality,
-            # metrics_plurality_strat,  # TODO: restore.
-            metrics_qv,
-            # metrics_qv_strat,         # TODO: restore.
-            # metrics_rdm,              # TODO: restore.
-        ],
-        ignore_index=True,
-    )
-
-    # Tag every row with run-level params
-    combined_df["num_agents"] = args.agents
-    combined_df["num_candidates"] = args.candidates
-    combined_df["num_preferences"] = args.preferences
-    combined_df["seed"] = args.seed
-    combined_df["run_id"] = run_id
+    combined_df = pd.concat(metrics_by_system, ignore_index=True)
+    _add_run_metadata(combined_df, args, run_id)
 
     print("Saving voting metrics plot")
     fig_voting_metrics, _ = plot_voting_metrics(combined_df)
 
-    # Save data, config, and figures
-    os.makedirs(args.out_dir, exist_ok=True)
-    os.makedirs(args.fig_dir, exist_ok=True)
-    csv_path = os.path.join(args.out_dir, f"{run_id}_metrics.csv")
-    json_path = os.path.join(args.out_dir, f"{run_id}_config.json")
-
-    fig_preference.savefig(
-        os.path.join(args.fig_dir, f"{run_id}_preference.png"),
-        dpi=150,
-        bbox_inches="tight",
+    figures = {
+        "preference": fig_preference,
+        "voting_metrics": fig_voting_metrics,
+        "trajectories": fig_trajectories,
+    }
+    csv_path, json_path = _save_outputs(
+        args,
+        run_id,
+        combined_df,
+        figures,
     )
-    fig_voting_metrics.savefig(
-        os.path.join(args.fig_dir, f"{run_id}_voting_metrics.png"),
-        dpi=150,
-        bbox_inches="tight",
-    )
-    fig_trajectories.savefig(
-        os.path.join(args.fig_dir, f"{run_id}_trajectories.png"),
-        dpi=150,
-        bbox_inches="tight",
-    )
-
-    combined_df.to_csv(csv_path, index=False)
-
-    with open(json_path, "w", encoding="utf-8") as f:
-        json.dump(vars(args), f, indent=4)
-
-    print("Simulation finished.")
-    print(f"Results saved to: {csv_path}")
-    print(f"Config saved to: {json_path}")
-    print("\nSummary:")
-    numeric_cols = combined_df.select_dtypes(include="number").columns.tolist()
-    print(combined_df.groupby("voting_system")[numeric_cols].mean())
+    _print_summary(combined_df, csv_path, json_path)
 
 
 if __name__ == "__main__":
