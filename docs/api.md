@@ -36,10 +36,16 @@ Auto-generated reference for the public API of `eci`. See the
 KL gap helpers, candidate-utility computation and `response_function`
 variants used by both voting rules, living in `eci.decision`.
 (`_get_pref_belief_gap` was renamed `_get_belief_preference_gap`.)
+`_get_expected_free_energy` scores each candidate's post-election world and
+backs the active-inference response function `response_function_efe`.
 
 ::: eci.decision.utilities
+    options:
+      filters: ["!^__"]
 
 ::: eci.decision.response
+    options:
+      filters: ["!^__"]
 
 ### Scoring
 
