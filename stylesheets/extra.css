@@ -1,0 +1,96 @@
+/* =====================================================================
+   ECI — modern UI overrides for MkDocs Material
+   ===================================================================== */
+
+/* ---- Brand colour ---- */
+:root {
+  --md-primary-fg-color:        #3b5bdb;
+  --md-primary-fg-color--light: #5c7cfa;
+  --md-primary-fg-color--dark:  #364fc7;
+  --md-accent-fg-color:         #f59f00;
+  --md-accent-fg-color--transparent: #f59f001a;
+}
+[data-md-color-scheme="slate"] {
+  --md-primary-fg-color: #5c7cfa;
+  --md-default-bg-color: #0f1117;   /* deeper, more modern dark background */
+}
+
+/* ---- Stronger, tighter headings ---- */
+.md-typeset h1 { font-weight: 800; letter-spacing: -0.02em; }
+.md-typeset h2 { font-weight: 700; letter-spacing: -0.01em; }
+
+/* ---- Cards: rounded with hover lift ---- */
+.md-typeset .grid.cards > ul > li {
+  border-radius: 14px;
+  border: 1px solid var(--md-default-fg-color--lightest);
+  padding: 1rem 1.1rem;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+}
+.md-typeset .grid.cards > ul > li:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.10);
+  border-color: var(--md-accent-fg-color);
+}
+
+/* ---- Buttons: pill shape ---- */
+.md-typeset .md-button {
+  border-radius: 999px;
+  font-weight: 600;
+  padding: 0.55em 1.25em;
+}
+
+/* ---- Softer code blocks ---- */
+.md-typeset pre > code { border-radius: 10px; }
+
+/* ---- Nav tabs: subtle hover ---- */
+.md-tabs__link { opacity: 0.85; transition: opacity 0.15s ease; }
+.md-tabs__link:hover { opacity: 1; }
+
+/* ---- Full-bleed hero (home only) ---- */
+.eci-hero {
+  width: 100vw;
+  position: relative;
+  left: 50%;
+  margin-left: -50vw;
+  margin-top: -1.5rem;             /* eat the content top padding */
+  margin-bottom: 2.5rem;
+  padding: 4.5rem 1rem 4rem;
+  text-align: center;
+  color: #fff;
+  background: linear-gradient(135deg, #364fc7 0%, #4263eb 45%, #7048e8 100%);
+}
+.eci-hero__inner { max-width: 46rem; margin: 0 auto; }
+.eci-hero__title {
+  font-size: 2.9rem;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1.05;
+  margin: 0;
+  color: #fff;
+}
+.eci-hero__tagline {
+  font-size: 1.12rem;
+  opacity: 0.92;
+  margin: 1rem auto 1.75rem;
+}
+.eci-hero__buttons {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+.eci-hero .md-button {
+  border-radius: 999px;
+  border-color: #fff;
+  color: #fff;
+}
+.eci-hero .md-button:hover {
+  background: #fff;
+  color: var(--md-primary-fg-color);
+  border-color: #fff;
+}
+.eci-hero .md-button--primary {
+  background: #fff;
+  color: var(--md-primary-fg-color);
+}
+.eci-hero .md-button--primary:hover { background: rgba(255, 255, 255, 0.85); }
