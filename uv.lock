@@ -757,6 +757,7 @@ dev = [
 [package.dev-dependencies]
 dev = [
     { name = "coverage" },
+    { name = "ipywidgets" },
     { name = "mkdocs-git-revision-date-localized-plugin" },
     { name = "mkdocs-jupyter" },
     { name = "mkdocs-material" },
@@ -802,6 +803,7 @@ provides-extras = ["dev"]
 [package.metadata.requires-dev]
 dev = [
     { name = "coverage", specifier = ">=7.10.7" },
+    { name = "ipywidgets", specifier = ">=8.1.0" },
     { name = "mkdocs-git-revision-date-localized-plugin", specifier = ">=1.5.1" },
     { name = "mkdocs-jupyter", specifier = ">=0.25.1" },
     { name = "mkdocs-material", specifier = ">=9.7.1" },

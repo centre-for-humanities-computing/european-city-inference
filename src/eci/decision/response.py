@@ -10,6 +10,7 @@ from eci.decision.types import ElectionData, ResponseResult
 from eci.decision.utilities import (
     _compute_candidate_utilities,
     _get_belief_preference_gap,
+    _get_expected_free_energy,
     _get_expected_future_belief_gap,
     _get_pref_candidate_cross_entropy,
     _get_pref_candidate_gap,
@@ -326,4 +327,69 @@ def response_function_bayesian(
 
     utilities = scoring_fn(current_gap, future_gap)
 
+    return _sample_from_utilities(utilities, key, mask)
+
+
+# TODO: Maybe give full data parameter instead of dataframe
+def response_function_efe(
+    data: dict,
+    key: ArrayLike,
+    mask: Optional[ArrayLike] = None,
+    *args,
+    gamma: float = 1.0,
+    **kwargs,
+) -> Tuple[ArrayLike, ArrayLike, ArrayLike, ArrayLike]:
+    r"""Sample one vote per agent by minimising **Expected Free Energy**.
+
+    This is the active-inference / Bayesian-decision-theory response function.
+    For each candidate the agent imagines the post-election world by fusing its
+    current belief with the candidate's platform, then scores that world by its
+    Expected Free Energy
+
+    .. math::
+
+        G(c) = H\!\left(q^c_\text{future},\, P\right)
+             = D_{KL}\!\left(q^c_\text{future} \,\|\, P\right)
+             + H\!\left(q^c_\text{future}\right),
+
+    a *risk* term (KL to the preference) plus an *ambiguity* term (entropy of
+    the future world), and votes with a precision-weighted softmax of -EFE,
+    :math:`P(\text{vote}=c) \propto \exp(-\gamma\, G(c))`.
+
+    Unlike the direct response functions, the belief enters through the fusion
+    (so it changes *which* candidate is favoured, not merely the decisiveness),
+    while the action precision ``gamma`` controls how sharply the agent commits
+    to the lowest-EFE candidate.
+
+    Parameters
+    ----------
+    data
+        Agent data dict with ``beliefs``, ``preferences``, ``candidates``,
+        each holding ``mean`` and ``precision`` arrays.
+    key
+        A JAX PRNG key.
+    mask
+        Boolean array of shape ``(n_candidates,)``. ``True`` keeps the
+        candidate, ``False`` excludes it (utility set to ``-inf`` before
+        softmax).
+    gamma
+        Action precision (inverse softmax temperature). Larger ``gamma`` makes
+        the vote sharper; ``gamma -> 0`` makes it uniform.
+
+    Returns
+    -------
+    vote, softmax_probs, candidate_utilities, next_key
+        See :class:`ResponseFunction` for the full shape contract. Here
+        ``candidate_utilities`` are the negative-EFE scores ``-gamma * G(c)``.
+    """
+    free_energy = _get_expected_free_energy(
+        data["beliefs"]["mean"],
+        data["beliefs"]["precision"],
+        data["preferences"]["mean"],
+        data["preferences"]["precision"],
+        data["candidates"]["mean"],
+        data["candidates"]["precision"],
+    )
+
+    utilities = -gamma * free_energy
     return _sample_from_utilities(utilities, key, mask)
