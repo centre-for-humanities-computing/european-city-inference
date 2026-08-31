@@ -90,13 +90,6 @@ uv run pytest -k "quadratic and tie" -v           # by keyword
 Coverage is configured in `pyproject.toml`. After `make tests`, open
 `htmlcov/index.html` for the line-by-line view.
 
-### Notebooks are tests too
-
-The CI pipeline executes every notebook in `notebooks/` (`make
-run-all-notebooks` locally). If you add a notebook, make sure it runs
-end-to-end on a clean kernel. Heavy notebooks should keep their compute
-under ~10 min per cell — there is a 600 s timeout configured in CI.
-
 ---
 
 ## Code style

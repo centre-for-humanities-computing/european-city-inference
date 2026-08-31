@@ -3,12 +3,13 @@ from typing import Optional
 import jax
 import jax.numpy as jnp
 
+from eci.decision.types import ElectionData
 from eci.voting.types import VoteResult
 
 
 # TODO: Allow positive and negative
 def _vote_quadratic(
-    data,
+    data: ElectionData,
     response_function,
     key,
     *args,
@@ -23,7 +24,7 @@ def _vote_quadratic(
     data:
         Agent data dict (beliefs, preferences, candidates).
     response_function:
-        Implements the :class:`~eci.voting_system.ResponseFunction` protocol.
+        Implements the :class:`~eci.decision.ResponseFunction` protocol.
     key:
         A JAX PRNG key for seeding random operations.
     budget:
@@ -34,15 +35,19 @@ def _vote_quadratic(
     Returns
     -------
     VoteResult
-        See :class:`~eci.voting_system.types.VoteResult` for the full
+        See :class:`~eci.voting.types.VoteResult` for the full
         field contract. QV adds ``credits_spent``.
     """
-    # Sample round 1 preferences.
-    _, softmax_probs, candidate_utilities, key = response_function(data, key)
+    _, vote_probabilities, candidate_utilities, allocation_key = response_function(
+        data,
+        key,
+    )
 
-    # Allocate credits → votes per (agent, candidate).
-    votes_matrix, credits_spent = _compute_sequential_qv_allocation(
-        key, candidate_utilities, budget, num_votes=num_votes
+    votes_matrix, credits_spent = _compute_qv_allocation(
+        allocation_key,
+        candidate_utilities,
+        budget,
+        num_votes=num_votes,
     )
     votes_per_candidate = jnp.sum(votes_matrix, axis=0)
     winner = jnp.argmax(votes_per_candidate)
@@ -52,7 +57,7 @@ def _vote_quadratic(
         "votes_matrix": votes_matrix,
         "votes_per_candidate": votes_per_candidate,
         "winner": winner,
-        "softmax": softmax_probs,
+        "softmax": vote_probabilities,
         "candidate_utilities": candidate_utilities,
         # QV-specific:
         "credits_spent": credits_spent,
@@ -63,23 +68,39 @@ def _vote_quadratic(
 
 
 # TODO: Implement different allocation strategies.
-def _gumbel_top_k(key, logits, k):
+def _gumbel_top_k(key, logits, selection_count):
     """Sample k distinct items per row with prob ∝ softmax(logits)."""
-    gumbel = -jnp.log(-jnp.log(jax.random.uniform(key, logits.shape)))
-    _, top_idx = jax.lax.top_k(logits + gumbel, k)
-    return jnp.sum(jax.nn.one_hot(top_idx, logits.shape[1]), axis=1)
-
-
-def _qv_credits_per_pick(utilities, budget, num_votes):
-    """Per-(agent, candidate) credit weight before pick mask."""
-    per_pick = budget / num_votes
-    return jax.nn.softmax(utilities, axis=1) * per_pick
+    gumbel_noise = -jnp.log(-jnp.log(jax.random.uniform(key, logits.shape)))
+    _, selected_indices = jax.lax.top_k(
+        logits + gumbel_noise,
+        selection_count,
+    )
+    return jnp.sum(
+        jax.nn.one_hot(selected_indices, logits.shape[1]),
+        axis=1,
+    )
 
 
 def _add_credit_jitter(credits, key, scale):
     """Add Gaussian jitter and clip to >= 0 so sqrt stays real."""
-    noise = jax.random.normal(key, credits.shape) * scale
-    return jnp.maximum(credits + noise, 0.0)
+    credit_jitter = jax.random.normal(key, credits.shape) * scale
+    return jnp.maximum(credits + credit_jitter, 0.0)
+
+
+def _normalize_credit_budget(credits, budget, fallback_weights):
+    """Normalize each agent's non-negative credits to exactly ``budget``."""
+    credit_totals = jnp.sum(credits, axis=1, keepdims=True)
+    fallback_weight_totals = jnp.sum(
+        fallback_weights,
+        axis=1,
+        keepdims=True,
+    )
+    normalized_weights = jnp.where(
+        credit_totals > 0,
+        credits / jnp.maximum(credit_totals, 1e-12),
+        fallback_weights / jnp.maximum(fallback_weight_totals, 1e-12),
+    )
+    return normalized_weights * budget
 
 
 def _credits_to_votes(credits):
@@ -87,9 +108,7 @@ def _credits_to_votes(credits):
     return jnp.floor(jnp.sqrt(credits)).astype(jnp.int32)
 
 
-def _compute_sequential_qv_allocation(
-    key, utilities, budget, num_votes=5, noise_scale=0.05
-):
+def _compute_qv_allocation(key, utilities, budget, num_votes=5, noise_scale=0.05):
     """Allocate QV credits to candidates per agent, then convert to votes.
 
     Parameters
@@ -109,19 +128,43 @@ def _compute_sequential_qv_allocation(
     -------
     ``(votes_matrix, credits_spent)``, both shape (n_agents, n_cand).
     """
-    n_cand = utilities.shape[1]
+    candidate_count = utilities.shape[1]
 
     if num_votes is None:
         # Adaptive: distribute the full budget across all candidates by utility.
-        weights = jax.nn.softmax(utilities, axis=1) * budget
-        credits = _add_credit_jitter(weights, key, noise_scale * budget / n_cand)
-        return _credits_to_votes(credits), credits
+        utility_weights = jax.nn.softmax(utilities, axis=1)
+        perturbed_credits = _add_credit_jitter(
+            utility_weights * budget,
+            key,
+            noise_scale * budget / candidate_count,
+        )
+        normalized_credits = _normalize_credit_budget(
+            perturbed_credits,
+            budget,
+            utility_weights,
+        )
+        return _credits_to_votes(normalized_credits), normalized_credits
 
-    num_votes = min(num_votes, n_cand)
-    weights = _qv_credits_per_pick(utilities, budget, num_votes)
+    num_votes = min(num_votes, candidate_count)
     gumbel_key, noise_key = jax.random.split(key)
-    picks = _gumbel_top_k(gumbel_key, utilities, num_votes)
-    credits = picks * _add_credit_jitter(
-        weights, noise_key, noise_scale * budget / num_votes
+    selected_candidates = _gumbel_top_k(gumbel_key, utilities, num_votes)
+    selected_utility_weights = selected_candidates * jax.nn.softmax(
+        utilities,
+        axis=1,
     )
-    return _credits_to_votes(credits), credits
+    perturbed_credits = selected_candidates * _add_credit_jitter(
+        selected_utility_weights * budget,
+        noise_key,
+        noise_scale * budget / num_votes,
+    )
+    normalized_credits = _normalize_credit_budget(
+        perturbed_credits,
+        budget,
+        selected_candidates,
+    )
+    return _credits_to_votes(normalized_credits), normalized_credits
+
+
+# Backward-compatible alias for code written before the allocation stopped being
+# sequential.
+_compute_sequential_qv_allocation = _compute_qv_allocation

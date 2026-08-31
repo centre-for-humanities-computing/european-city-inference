@@ -21,19 +21,26 @@ def compute_vote_shares(
     """
     # Preferred: uniform votes_matrix → just sum over agents and normalise.
     if "votes_matrix" in results_stacked:
-        v = np.asarray(results_stacked["votes_matrix"]).sum(axis=1).astype(float)
+        votes_per_candidate = (
+            np.asarray(results_stacked["votes_matrix"]).sum(axis=1).astype(float)
+        )
     # Legacy: QV gives per-candidate totals directly via "votes".
     elif "qv_votes_matrix" in results_stacked:
-        v = np.asarray(results_stacked["votes"], dtype=float)
+        votes_per_candidate = np.asarray(results_stacked["votes"], dtype=float)
     # Legacy: plurality stores per-voter indices in "votes".
     elif "votes" in results_stacked:
-        v_raw = np.asarray(results_stacked["votes"])
-        v = np.stack(
-            [(v_raw == c).sum(axis=1) for c in range(n_candidates)], axis=1
+        chosen_candidate_indices = np.asarray(results_stacked["votes"])
+        votes_per_candidate = np.stack(
+            [
+                (chosen_candidate_indices == candidate_index).sum(axis=1)
+                for candidate_index in range(n_candidates)
+            ],
+            axis=1,
         ).astype(float)
     else:
         raise KeyError("results_stacked must contain a 'votes' or 'votes_matrix' key")
-    return v / np.maximum(v.sum(axis=1, keepdims=True), 1e-12)
+    vote_totals = votes_per_candidate.sum(axis=1, keepdims=True)
+    return votes_per_candidate / np.maximum(vote_totals, 1e-12)
 
 
 def plot_voting_system_comparison(
@@ -41,58 +48,72 @@ def plot_voting_system_comparison(
     ax: Optional[plt.Axes] = None,
 ) -> Tuple[plt.Figure, plt.Axes]:
     """Compare mean vote share per candidate across voting systems."""
-    systems = list(shares_by_system.keys())
-    arrays = {s: np.asarray(v) for s, v in shares_by_system.items()}
-    n_sim, n_candidates = next(iter(arrays.values())).shape
-    means = {s: v.mean(axis=0) for s, v in arrays.items()}
-    stds = {s: v.std(axis=0) for s, v in arrays.items()}
+    system_names = list(shares_by_system)
+    vote_shares = {
+        system_name: np.asarray(system_shares)
+        for system_name, system_shares in shares_by_system.items()
+    }
+    simulation_count, candidate_count = next(iter(vote_shares.values())).shape
+    mean_shares = {
+        system_name: system_shares.mean(axis=0)
+        for system_name, system_shares in vote_shares.items()
+    }
+    share_standard_deviations = {
+        system_name: system_shares.std(axis=0)
+        for system_name, system_shares in vote_shares.items()
+    }
 
     with _get_context():
         if ax is None:
-            fig, ax = plt.subplots(figsize=(8, 4.5), constrained_layout=True)
+            figure, ax = plt.subplots(figsize=(8, 4.5), constrained_layout=True)
         else:
-            fig = cast(plt.Figure, ax.figure)
+            figure = cast(plt.Figure, ax.figure)
 
-        colors = sns.color_palette("viridis", n_colors=len(systems))
-        x = np.arange(n_candidates)
-        width = 0.8 / len(systems)
+        system_colors = sns.color_palette("viridis", n_colors=len(system_names))
+        candidate_positions = np.arange(candidate_count)
+        bar_width = 0.8 / len(system_names)
 
-        for i, s in enumerate(systems):
-            offset = (i - (len(systems) - 1) / 2) * width
+        for system_index, system_name in enumerate(system_names):
+            offset = (system_index - (len(system_names) - 1) / 2) * bar_width
             ax.bar(
-                x + offset,
-                means[s],
-                width=width * 0.95,
-                yerr=stds[s],
-                color=colors[i],
+                candidate_positions + offset,
+                mean_shares[system_name],
+                width=bar_width * 0.95,
+                yerr=share_standard_deviations[system_name],
+                color=system_colors[system_index],
                 alpha=0.85,
                 edgecolor="black",
                 linewidth=0.5,
                 ecolor="black",
                 capsize=3,
-                label=s,
+                label=system_name,
             )
 
-        ax.set_xticks(x)
-        ax.set_xticklabels([f"C{i}" for i in range(n_candidates)])
+        ax.set_xticks(candidate_positions)
+        ax.set_xticklabels(
+            [f"C{candidate_index}" for candidate_index in range(candidate_count)]
+        )
         ax.set_ylabel("Vote share")
         ax.set_ylim(0, 1)
         ax.set_title(
-            f"Voting system comparison (mean ± 1 std over {n_sim} simulations)",
+            "Voting system comparison "
+            f"(mean ± 1 std over {simulation_count} simulations)",
             fontsize=11,
         )
         ax.legend(loc="upper right", frameon=True)
-    return fig, ax
+    return figure, ax
 
 
-def plot_voting_metrics(combined_df: pd.DataFrame):
+def plot_voting_metrics(
+    combined_df: pd.DataFrame,
+) -> tuple[plt.Figure, np.ndarray]:
     """Plot voting metrics (vote_efficiency, winner_satisfaction) per system."""
     sns.set_theme(style="whitegrid", context="paper", font_scale=1.2)
-    plot_df = combined_df.rename(columns={"voting_system": "System"})
-    fig, ax = plt.subplots(1, 2, figsize=(18, 6), sharey=False)
+    plot_data = combined_df.rename(columns={"voting_system": "System"})
+    figure, axes = plt.subplots(1, 2, figsize=(18, 6), sharey=False)
 
     sns.stripplot(
-        data=plot_df,
+        data=plot_data,
         x="System",
         y="vote_efficiency",
         hue="System",
@@ -100,14 +121,18 @@ def plot_voting_metrics(combined_df: pd.DataFrame):
         alpha=0.6,
         jitter=0.25,
         legend=False,
-        ax=ax[0],
+        ax=axes[0],
     )
-    ax[0].set_title("How well do votes reflect preferences?", fontsize=14, pad=15)
-    ax[0].set_ylabel("Total Weighted Utility")
-    ax[0].set_xlabel("")
+    axes[0].set_title(
+        "How well do votes reflect preferences?",
+        fontsize=14,
+        pad=15,
+    )
+    axes[0].set_ylabel("Total Weighted Utility")
+    axes[0].set_xlabel("")
 
     sns.stripplot(
-        data=plot_df,
+        data=plot_data,
         x="System",
         y="winner_satisfaction",
         hue="System",
@@ -115,9 +140,13 @@ def plot_voting_metrics(combined_df: pd.DataFrame):
         alpha=0.6,
         jitter=0.25,
         legend=False,
-        ax=ax[1],
+        ax=axes[1],
     )
-    ax[1].set_title("Does the winner satisfy the group?", fontsize=14, pad=15)
-    ax[1].set_ylabel("Total Utility of Winner")
-    ax[1].set_xlabel("")
-    return fig, ax
+    axes[1].set_title(
+        "Does the winner satisfy the group?",
+        fontsize=14,
+        pad=15,
+    )
+    axes[1].set_ylabel("Total Utility of Winner")
+    axes[1].set_xlabel("")
+    return figure, axes

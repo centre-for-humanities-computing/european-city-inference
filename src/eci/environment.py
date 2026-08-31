@@ -7,6 +7,7 @@ import tqdm
 from jax.tree_util import tree_map
 
 from eci.agents import Agent, Candidate, Voter
+from eci.decision.types import ElectionData
 from eci.perceptual import PerceptualModel
 from eci.population import Population, PopulationConfig
 from eci.world import World
@@ -177,15 +178,21 @@ class Environment:
         for i, voter in enumerate(self.voters):
             voter.trajectory = tree_map(lambda x, _i=i: x[_i], self.node_trajectories)
 
-    def _run_single_agent_inference(self, mu, pi, tonic_volatility, network=None):
+    def _run_single_agent_inference(
+        self,
+        preference_means,
+        preference_precisions,
+        tonic_volatility,
+        network=None,
+    ):
         """Legacy single-agent inference path. Delegates to PerceptualModel.
 
         Kept for tests that mock-patch this method. New code should use
         ``self.perceptual.run(...)``.
         """
         return self.perceptual._run_one_agent(
-            mu,
-            pi,
+            preference_means,
+            preference_precisions,
             tonic_volatility,
             self.world.observations,
             network if network is not None else self.perceptual.network,
@@ -202,7 +209,7 @@ class Environment:
     def run_n_simulation(
         self,
         func,
-        data,
+        data: ElectionData,
         response_function,
         key,
         n_simulations: int,
@@ -280,41 +287,117 @@ class Environment:
         if key is None:
             key = jax.random.PRNGKey(0)
 
-        base = _extract_env_data_vectorized(self)
-        prefs, cands = base["preferences"], base["candidates"]
-        n_cand = cands["mean"].shape[0]
+        base_data = _extract_env_data_vectorized(self)
+        n_candidates = base_data["candidates"]["mean"].shape[0]
         n_steps = self.input_data.shape[0]
-        pidx = self.preferences_idx
+        belief_means, belief_precisions = self._belief_trajectories()
 
-        # Per-(agent, step, preference) beliefs from the input-node trajectories.
-        bmean = jnp.stack(
-            [self.node_trajectories[i]["expected_mean"] for i in pidx], axis=-1
-        )  # (n_agents, n_steps, n_pref)
-        bprec = jnp.stack(
-            [self.node_trajectories[i]["expected_precision"] for i in pidx], axis=-1
+        outcomes_by_timestep = []
+        for timestep in range(n_steps):
+            timestep_data = self._data_at_timestep(
+                base_data,
+                belief_means,
+                belief_precisions,
+                timestep,
+            )
+            simulation_keys = jax.random.split(
+                jax.random.fold_in(key, timestep), n_simulations
+            )
+            election_results = self._run_election_batch(
+                timestep_data,
+                response_function,
+                voting_function,
+                simulation_keys,
+                vote_kwargs,
+            )
+            outcome = self._summarize_election_results(
+                election_results,
+                metric,
+                n_candidates,
+                n_simulations,
+            )
+            outcomes_by_timestep.append(outcome)
+
+        return jnp.stack(outcomes_by_timestep, axis=1)
+
+    def _belief_trajectories(self) -> tuple[jax.Array, jax.Array]:
+        """Stack HGF belief trajectories as ``(agent, step, preference)`` arrays."""
+        preference_node_indices = self.preferences_idx
+        node_trajectories = self.node_trajectories
+        if preference_node_indices is None or node_trajectories is None:
+            raise RuntimeError(
+                "Belief trajectories are not available before inference."
+            )
+
+        belief_means = jnp.stack(
+            [
+                node_trajectories[node_idx]["expected_mean"]
+                for node_idx in preference_node_indices
+            ],
+            axis=-1,
         )
+        belief_precisions = jnp.stack(
+            [
+                node_trajectories[node_idx]["expected_precision"]
+                for node_idx in preference_node_indices
+            ],
+            axis=-1,
+        )
+        return belief_means, belief_precisions
 
-        columns = []
-        for t in range(n_steps):
-            data_t = {
-                "beliefs": {"mean": bmean[:, t, :], "precision": bprec[:, t, :]},
-                "preferences": prefs,
-                "candidates": cands,
-            }
-            sim_keys = jax.random.split(jax.random.fold_in(key, t), n_simulations)
-            outs = jax.vmap(
-                lambda k: voting_function(data_t, response_function, k, **vote_kwargs)
-            )(sim_keys)
-            if metric == "win":
-                # P(win) per candidate = fraction of elections each one wins.
-                winners = outs["winner"]  # (n_sims,)
-                col = jnp.bincount(winners, length=n_cand) / n_simulations
-            else:  # metric == "share"
-                vps = outs["votes_per_candidate"].astype(jnp.float32)
-                share = vps / jnp.maximum(jnp.sum(vps, axis=1, keepdims=True), 1e-9)
-                col = jnp.mean(share, axis=0)
-            columns.append(col)
-        return jnp.stack(columns, axis=1)  # (n_candidates, n_steps)
+    @staticmethod
+    def _data_at_timestep(
+        base_data: ElectionData,
+        belief_means: jax.Array,
+        belief_precisions: jax.Array,
+        timestep: int,
+    ) -> ElectionData:
+        """Combine fixed election data with beliefs from one timestep."""
+        return {
+            "beliefs": {
+                "mean": belief_means[:, timestep, :],
+                "precision": belief_precisions[:, timestep, :],
+            },
+            "preferences": base_data["preferences"],
+            "candidates": base_data["candidates"],
+        }
+
+    @staticmethod
+    def _run_election_batch(
+        timestep_data: ElectionData,
+        response_function,
+        voting_function,
+        simulation_keys: jax.Array,
+        vote_kwargs: dict,
+    ):
+        """Run a batch of stochastic elections for one timestep."""
+        return jax.vmap(
+            lambda simulation_key: voting_function(
+                timestep_data,
+                response_function,
+                simulation_key,
+                **vote_kwargs,
+            )
+        )(simulation_keys)
+
+    @staticmethod
+    def _summarize_election_results(
+        election_results,
+        metric: str,
+        n_candidates: int,
+        n_simulations: int,
+    ) -> jax.Array:
+        """Summarize an election batch as candidate win frequencies or vote shares."""
+        if metric == "win":
+            winners = election_results["winner"]
+            return jnp.bincount(winners, length=n_candidates) / n_simulations
+
+        votes_per_candidate = election_results["votes_per_candidate"].astype(
+            jnp.float32
+        )
+        total_votes = jnp.sum(votes_per_candidate, axis=1, keepdims=True)
+        vote_shares = votes_per_candidate / jnp.maximum(total_votes, 1e-9)
+        return jnp.mean(vote_shares, axis=0)
 
     def _gather_agent_data(self):
         """Return ``(voter_means, voter_precisions, voter_volatilities)``.

@@ -16,11 +16,18 @@ This page explains the contract and walks through implementing one.
 
 ## The contract
 
-A response function is any callable that satisfies the
+A response function is any callable that follows the
 [`ResponseFunction`][eci.decision.response.ResponseFunction] protocol:
 
 ```python
-def my_response(data, key, mask=None) -> tuple[Array, Array, Array, Array]:
+from eci.decision import ElectionData, ResponseResult
+
+
+def my_response(
+    data: ElectionData,
+    key,
+    mask=None,
+) -> ResponseResult:
     ...
 ```
 
@@ -92,7 +99,7 @@ result = _vote_plurality(data, hesitant, key)
 That's it. No registration, no subclassing. The voting rule treats your
 function exactly like the built-in `response_function`.
 
-### 3. Verify it conforms (recommended)
+### 3. Run a basic structural check
 
 ```python
 from eci.decision import ResponseFunction
@@ -100,8 +107,9 @@ from eci.decision import ResponseFunction
 assert isinstance(response_function_temperature, ResponseFunction)
 ```
 
-This is a runtime check on the signature. It catches typos and missing
-return values before they hit the simulation loop.
+This runtime check confirms that the object is callable. Python protocols do
+not inspect a callable's parameter list or return values at runtime, so also
+invoke the function in a test and verify the four output shapes shown above.
 
 ---
 

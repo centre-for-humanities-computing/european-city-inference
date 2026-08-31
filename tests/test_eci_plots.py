@@ -3,14 +3,23 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import pytest
+from matplotlib.animation import FuncAnimation
 
 matplotlib.use("Agg")
 
 from eci.plots import (
+    _bootstrap_proportion_ci,
+    animate_belief_trajectory,
+    compute_vote_shares,
     plot_belief_trajectory,
+    plot_belief_vote_evolution,
     plot_preference,
     plot_vote_shares,
     plot_voting_metrics,
+    plot_voting_system_comparison,
+    plot_winner_distribution,
+    plot_winner_distribution_grouped,
+    plurality_results_to_share_df,
 )
 
 
@@ -94,6 +103,47 @@ class TestPlots:
         assert len(ax_main.collections) > 0
         assert len(ax_main.lines) > 0
 
+    def test_plot_belief_vote_evolution(self):
+        """Verify the combined plot labels and renders both vote heatmaps."""
+        steps = 5
+        fig, axes = plot_belief_vote_evolution(
+            expected_mean=np.linspace(0, 1, steps),
+            expected_precision=np.ones(steps),
+            observations=np.linspace(0.1, 0.9, steps),
+            preference_params=(0.5, 10.0),
+            plurality_matrix=np.full((2, steps), 0.5),
+            quadratic_matrix=np.full((2, steps), 0.25),
+            candidate_labels=["North", "South"],
+            shock_t=2,
+        )
+
+        belief_axis, _, plurality_axis, quadratic_axis = axes
+        assert isinstance(fig, plt.Figure)
+        assert (
+            belief_axis.get_title(loc="left") == "Belief trajectory and vote evolution"
+        )
+        assert plurality_axis.get_yticklabels()[0].get_text() == "North"
+        assert len(plurality_axis.images) == 1
+        assert len(quadratic_axis.images) == 1
+
+    def test_animate_belief_trajectory_renders_frame(self):
+        """Verify the animation callback updates its title and artists."""
+        steps = 4
+        animation = animate_belief_trajectory(
+            expected_mean=np.linspace(0, 1, steps),
+            expected_precision=np.ones(steps),
+            observations=np.linspace(0.1, 0.9, steps),
+            preference_params=(0.5, 10.0),
+            title_suffix="Test",
+        )
+
+        updated_artists = animation._func(1)
+
+        assert isinstance(animation, FuncAnimation)
+        assert len(updated_artists) == 3
+        assert animation._fig.axes[0].get_title() == "Belief Trajectory Test — step 1"
+        animation._draw_was_started = True
+
     def test_plot_voting_metrics(self):
         """Verifies that plot_voting_metrics generates the two subplots."""
         df = pd.DataFrame(
@@ -113,6 +163,81 @@ class TestPlots:
         # Check titles to ensure correct plotting logic
         assert "reflect preferences" in ax_array[0].get_title()
         assert "satisfy the group" in ax_array[1].get_title()
+
+    def test_compute_vote_shares_from_vote_matrix(self):
+        """Vote matrices are normalized per simulation."""
+        results = {
+            "votes_matrix": np.array(
+                [
+                    [
+                        [1, 0],
+                        [0, 2],
+                    ]
+                ]
+            )
+        }
+
+        shares = compute_vote_shares(results, n_candidates=2)
+
+        assert shares.shape == (1, 2)
+        assert np.allclose(shares, [[1 / 3, 2 / 3]])
+
+    def test_plot_voting_system_comparison(self):
+        """Voting-system comparison labels candidates and returns its axis."""
+        fig, axis = plot_voting_system_comparison(
+            {
+                "Plurality": np.array([[0.75, 0.25], [0.5, 0.5]]),
+                "Quadratic": np.array([[0.5, 0.5], [0.25, 0.75]]),
+            }
+        )
+
+        assert isinstance(fig, plt.Figure)
+        assert axis.get_xticklabels()[0].get_text() == "C0"
+        assert "2 simulations" in axis.get_title()
+
+    def test_plurality_results_to_share_frame(self):
+        """Two-round plurality results become labeled candidate shares."""
+        vote_shares = plurality_results_to_share_df(
+            {
+                "vote_round_1": np.array([[0, 0, 1]]),
+                "vote_final_round_2": np.array([[0, 1, 1]]),
+            },
+            n_candidates=2,
+        )
+
+        assert len(vote_shares) == 4
+        candidate_zero_round_one = vote_shares[
+            (vote_shares["candidate"] == "C0") & (vote_shares["round"] == "Round 1")
+        ]
+        assert candidate_zero_round_one.iloc[0]["share"] == pytest.approx(2 / 3)
+
+    def test_winner_distribution_plots(self):
+        """Single and grouped winner plots render candidate bars."""
+        winners = np.array([0, 0, 1, 1])
+        point_estimates, lower_bounds, upper_bounds = _bootstrap_proportion_ci(
+            winners,
+            n_candidates=2,
+            n_boot=100,
+            seed=1,
+        )
+        single_figure, single_axis = plot_winner_distribution(
+            winners,
+            n_candidates=2,
+            n_boot=100,
+        )
+        grouped_figure, grouped_axis = plot_winner_distribution_grouped(
+            {"First": winners, "Second": winners[::-1]},
+            n_candidates=2,
+            n_boot=100,
+        )
+
+        assert np.allclose(point_estimates, [0.5, 0.5])
+        assert np.all(lower_bounds <= point_estimates)
+        assert np.all(point_estimates <= upper_bounds)
+        assert isinstance(single_figure, plt.Figure)
+        assert len(single_axis.patches) == 2
+        assert isinstance(grouped_figure, plt.Figure)
+        assert len(grouped_axis.patches) == 4
 
     def test_plot_metrics_empty_data(self):
         """Ensure function handles empty DataFrame without crashing."""

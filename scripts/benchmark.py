@@ -1,21 +1,34 @@
 import argparse
 import os
 import time
+from dataclasses import dataclass
+from typing import Any, Callable, Mapping
 
 import jax
 import pandas as pd
 
-from eci.decision import response_function
+from eci.decision import ElectionData, response_function
 from eci.environment import EnvConfig, Environment
 from eci.utils import _extract_env_data_vectorized
 from eci.voting import _vote_plurality, _vote_quadratic
 
-# TODO: restore random voting benchmark when `_vote_random_preferences`
-# (or its successor) is reintroduced.
-# from eci.voting.random_voting import _vote_random_preferences
+
+@dataclass(frozen=True)
+class BenchmarkRun:
+    """One named voting-system benchmark with its key and options."""
+
+    name: str
+    voting_function: Callable
+    key: Any
+    voting_options: Mapping[str, Any]
 
 
-def measure_batch_time(voting_func, env, data, key, num_simulations, **kwargs):
+def measure_batch_time(
+    run: BenchmarkRun,
+    environment: Environment,
+    data: ElectionData,
+    num_simulations: int,
+) -> float:
     """Measure the time to run `num_simulations` of a given voting function.
 
     Signature follows the post-refactor API:
@@ -24,28 +37,41 @@ def measure_batch_time(voting_func, env, data, key, num_simulations, **kwargs):
     """
     start_time = time.perf_counter()
 
-    results = env.run_n_simulation(
-        voting_func, data, response_function, key, num_simulations, **kwargs
+    simulation_results = environment.run_n_simulation(
+        run.voting_function,
+        data,
+        response_function,
+        run.key,
+        num_simulations,
+        **run.voting_options,
     )
-    results[num_simulations - 1]["winner"].block_until_ready()
+    simulation_results[num_simulations - 1]["winner"].block_until_ready()
 
-    end_time = time.perf_counter()
-    return end_time - start_time
+    return time.perf_counter() - start_time
 
 
-def main():
-    """Benchmarks the performance across varying agent sizes."""
+def _parse_args() -> argparse.Namespace:
+    """Parse benchmark command-line options."""
     parser = argparse.ArgumentParser(
         description="Benchmark JAX performance across multiple simulations."
     )
     parser.add_argument(
-        "--simulations", type=int, default=1000, help="Number of iterations per batch."
+        "--simulations",
+        type=int,
+        default=1000,
+        help="Number of iterations per batch.",
     )
     parser.add_argument(
-        "--candidates", type=int, default=8, help="Number of candidates."
+        "--candidates",
+        type=int,
+        default=8,
+        help="Number of candidates.",
     )
     parser.add_argument(
-        "--preferences", type=int, default=8, help="Number of preferences."
+        "--preferences",
+        type=int,
+        default=8,
+        help="Number of preferences.",
     )
     parser.add_argument(
         "--output",
@@ -53,12 +79,38 @@ def main():
         default="../results/benchmark_results.csv",
         help="Where to save the benchmark CSV.",
     )
-    args = parser.parse_args()
+    return parser.parse_args()
+
+
+def _benchmark_system(
+    run: BenchmarkRun,
+    environment: Environment,
+    data: ElectionData,
+    simulation_count: int,
+    agent_count: int,
+) -> dict:
+    """Benchmark one voting system and return a result row."""
+    total_time = measure_batch_time(
+        run,
+        environment,
+        data,
+        simulation_count,
+    )
+    return {
+        "agents": agent_count,
+        "system": run.name,
+        "total_time_s": total_time,
+        "iter_per_sec": simulation_count / total_time,
+    }
+
+
+def main():
+    """Benchmarks the performance across varying agent sizes."""
+    args = _parse_args()
 
     agent_sizes = [100, 1000, 5000, 10000]
     base_key = jax.random.PRNGKey(42)
-
-    benchmark_data = []
+    benchmark_rows = []
 
     print(f"Starting Benchmark ({args.simulations} simulations/system)")
     print("=" * 65)
@@ -67,74 +119,51 @@ def main():
     )
     print("-" * 65)
 
-    for n_agents in agent_sizes:
+    for agent_count in agent_sizes:
         config = EnvConfig(
-            num_voters=n_agents,
+            num_voters=agent_count,
             num_candidates=args.candidates,
             num_preferences=args.preferences,
             seed=42,
         )
-        env = Environment(config)
+        environment = Environment(config)
+        environment._run_multi_agent_inference()
+        data = _extract_env_data_vectorized(environment)
 
-        env._run_multi_agent_inference()
-        data = _extract_env_data_vectorized(env)
-
-        # TODO: re-add `key_rand` when random voting is restored.
-        key_quad, key_plur = jax.random.split(base_key, 2)
-
-        # TODO: restore random voting benchmark.
-        # rand_time = measure_batch_time(
-        #     _vote_random_preferences, env, data, key_rand, args.simulations
-        # )
-        # rand_iter_sec = args.simulations / rand_time
-        # benchmark_data.append(
-        #     {
-        #         "agents": n_agents,
-        #         "system": "Rdm_Pref",
-        #         "total_time_s": rand_time,
-        #         "iter_per_sec": rand_iter_sec,
-        #     }
-        # )
-
-        # Benchmark Plurality
-        plur_time = measure_batch_time(
-            _vote_plurality, env, data, key_plur, args.simulations
-        )
-        plur_iter_sec = args.simulations / plur_time
-        benchmark_data.append(
-            {
-                "agents": n_agents,
-                "system": "Plurality",
-                "total_time_s": plur_time,
-                "iter_per_sec": plur_iter_sec,
-            }
-        )
-
-        # Benchmark Quadratic
-        quad_time = measure_batch_time(
-            _vote_quadratic, env, data, key_quad, args.simulations, budget=99.0
-        )
-        quad_iter_sec = args.simulations / quad_time
-        benchmark_data.append(
-            {
-                "agents": n_agents,
-                "system": "Quadratic",
-                "total_time_s": quad_time,
-                "iter_per_sec": quad_iter_sec,
-            }
+        quadratic_key, plurality_key = jax.random.split(base_key, 2)
+        benchmark_runs = [
+            BenchmarkRun(
+                name="Plurality",
+                voting_function=_vote_plurality,
+                key=plurality_key,
+                voting_options={},
+            ),
+            BenchmarkRun(
+                name="Quadratic",
+                voting_function=_vote_quadratic,
+                key=quadratic_key,
+                voting_options={"budget": 99.0},
+            ),
+        ]
+        benchmark_rows.extend(
+            _benchmark_system(
+                run,
+                environment,
+                data,
+                args.simulations,
+                agent_count,
+            )
+            for run in benchmark_runs
         )
 
         print("-" * 65)
 
-    # Save the results to CSV
-    df_results = pd.DataFrame(benchmark_data)
+    results_frame = pd.DataFrame(benchmark_rows)
+    output_directory = os.path.dirname(args.output)
+    if output_directory:
+        os.makedirs(output_directory, exist_ok=True)
 
-    # Create the directory if it doesn't exist
-    output_dir = os.path.dirname(args.output)
-    if output_dir:
-        os.makedirs(output_dir, exist_ok=True)
-
-    df_results.to_csv(args.output, index=False)
+    results_frame.to_csv(args.output, index=False)
     print(f"Benchmark complete! Results saved to: {args.output}")
 
 

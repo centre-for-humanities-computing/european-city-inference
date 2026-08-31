@@ -5,7 +5,9 @@ import jax.numpy as jnp
 import pytest
 
 from eci.agents import Candidate, Voter
+from eci.decision import response_function_random
 from eci.environment import EnvConfig, Environment
+from eci.voting import _vote_plurality
 
 
 class TestEnvironment:
@@ -193,3 +195,26 @@ class TestEnvironment:
         v4 = env.voters[4]
         assert v4.trajectory["mean"] == 14
         assert v4.trajectory["precision"] == 24
+
+    def test_vote_outcome_over_time_returns_normalized_columns(self):
+        """The temporal election pipeline preserves its public output contract."""
+        env = Environment(
+            EnvConfig(
+                num_voters=3,
+                num_candidates=2,
+                num_preferences=1,
+                num_steps=3,
+                obs_seed=0,
+            )
+        )
+        env._run_multi_agent_inference()
+
+        outcomes = env.vote_outcome_over_time(
+            response_function_random,
+            _vote_plurality,
+            n_simulations=4,
+            key=jax.random.PRNGKey(0),
+        )
+
+        assert outcomes.shape == (2, 3)
+        assert jnp.allclose(jnp.sum(outcomes, axis=0), 1.0)

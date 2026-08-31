@@ -1,6 +1,10 @@
 from eci.voting.borda import _vote_borda
 from eci.voting.plurality import _vote_plurality
-from eci.voting.quadratic import _compute_sequential_qv_allocation, _vote_quadratic
+from eci.voting.quadratic import (
+    _compute_qv_allocation,
+    _compute_sequential_qv_allocation,
+    _vote_quadratic,
+)
 from eci.voting.types import VoteResult
 from eci.voting.utils import _find_top_k_winners, _find_winner
 
@@ -12,6 +16,7 @@ __all__ = [
     # Return type
     "VoteResult",
     # Helpers
+    "_compute_qv_allocation",
     "_compute_sequential_qv_allocation",
     "_find_winner",
     "_find_top_k_winners",

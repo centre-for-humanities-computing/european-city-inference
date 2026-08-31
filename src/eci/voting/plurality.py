@@ -1,11 +1,14 @@
 import jax
 import jax.numpy as jnp
 
+from eci.decision.types import ElectionData
 from eci.voting.types import VoteResult
 from eci.voting.utils import _find_winner
 
 
-def _vote_plurality(data, response_function, key, *args, **kwargs) -> VoteResult:
+def _vote_plurality(
+    data: ElectionData, response_function, key, *args, **kwargs
+) -> VoteResult:
     """Perform plurality voting.
 
     Each voter casts one vote (sampled by ``response_function``); the
@@ -17,32 +20,38 @@ def _vote_plurality(data, response_function, key, *args, **kwargs) -> VoteResult
     data:
         Agent data (beliefs, preferences, candidates).
     response_function:
-        Implements the :class:`~eci.voting_system.ResponseFunction` protocol.
+        Implements the :class:`~eci.decision.ResponseFunction` protocol.
     key:
         A JAX PRNG key used for seeding random operations.
 
     Returns
     -------
     VoteResult
-        See :class:`~eci.voting_system.types.VoteResult` for the full
+        See :class:`~eci.voting.types.VoteResult` for the full
         field contract.
     """
     # TODO: re-enable runoff (top-2) voting; the prototype lives in the git
     # history (commit before this refactor). Open an issue to track it.
-    votes, softmax, candidate_utilities, _key = response_function(data, key)
-    n_cand = candidate_utilities.shape[1]
+    selected_candidates, vote_probabilities, candidate_utilities, _ = response_function(
+        data, key
+    )
+    candidate_count = candidate_utilities.shape[1]
 
-    votes_matrix = jax.nn.one_hot(votes, n_cand, dtype=jnp.int32)
+    votes_matrix = jax.nn.one_hot(
+        selected_candidates,
+        candidate_count,
+        dtype=jnp.int32,
+    )
     votes_per_candidate = jnp.sum(votes_matrix, axis=0)
-    winner = _find_winner(votes, n_cand)
+    winner = _find_winner(selected_candidates, candidate_count)
 
     return {
         # Uniform fields (preferred):
         "votes_matrix": votes_matrix,
         "votes_per_candidate": votes_per_candidate,
         "winner": winner,
-        "softmax": softmax,
+        "softmax": vote_probabilities,
         "candidate_utilities": candidate_utilities,
         # Legacy (per-agent indices) — will be removed in v0.2:
-        "votes": votes,
+        "votes": selected_candidates,
     }

@@ -12,47 +12,105 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  tests:
-    name: Run Tests, Lint, Type-check & Notebooks
+  quality:
+    name: Lint & type-check
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v4
-
-      # ---- toolchain -----------------------------------------------------
-      - name: Install uv
-        uses: astral-sh/setup-uv@v3
+      - uses: astral-sh/setup-uv@v3
         with:
           version: "latest"
           enable-cache: true
-
-      - name: Set up Python
-        run: uv python install 3.12
-
-      - name: Install dependencies
-        run: uv sync --all-extras --dev
-
-      # ---- code quality --------------------------------------------------
-      - name: Lint with Ruff (format + check)
+          python-version: "3.12"
+      - run: uv sync --all-extras --dev
+      - name: Ruff (format + check)
         run: |
           uv run ruff format --check .
           uv run ruff check .
-
-      - name: Type-check with mypy
+      - name: mypy
         run: uv run mypy src/ --ignore-missing-imports --warn-unused-ignores
 
-      # ---- system deps for tests / notebooks -----------------------------
+  tests:
+    # One job per test category: they run in parallel and a red check names
+    # the category that broke.
+    name: tests (${{ matrix.suite }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        suite:
+          - agents
+          - decision
+          - environment
+          - metrics
+          - plots
+          - response_protocol
+          - scoring
+          - utils
+          - voting
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+        with:
+          version: "latest"
+          enable-cache: true
+          python-version: "3.12"
+      - run: uv sync --all-extras --dev
+      - name: pytest
+        env:
+          COVERAGE_FILE: .coverage.${{ matrix.suite }}
+        run: uv run pytest tests/test_eci_${{ matrix.suite }}*.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: coverage-${{ matrix.suite }}
+          path: .coverage.${{ matrix.suite }}
+          include-hidden-files: true
+
+  coverage:
+    name: Coverage report
+    needs: tests
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+        with:
+          version: "latest"
+          enable-cache: true
+          python-version: "3.12"
+      - run: uv sync --all-extras --dev
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: coverage-*
+          merge-multiple: true
+      - name: Combine
+        run: |
+          uv run coverage combine
+          uv run coverage html
+      - uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: htmlcov/
+      - name: Summary
+        run: |
+          echo "## 📊 Coverage Report" >> $GITHUB_STEP_SUMMARY
+          uv run coverage report --format=markdown >> $GITHUB_STEP_SUMMARY
+
+  notebooks:
+    name: Notebooks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+        with:
+          version: "latest"
+          enable-cache: true
+          python-version: "3.12"
+      - run: uv sync --all-extras --dev
       - name: Install Graphviz
         run: sudo apt-get update && sudo apt-get install -y graphviz
-
-      # ---- unit tests + coverage -----------------------------------------
-      - name: Run Tests with pytest
-        run: uv run pytest tests --cov=src --cov-report=html --cov-report=term --cov-report=xml
-
-      # ---- notebook execution (acts as integration tests) ----------------
-      # Per-cell timeout bumped to 600 s so the heavier notebooks
-      # (e.g. poster_figures.ipynb) have room to finish.
-      - name: Execute Notebooks
+      # Per-cell timeout bumped to 600 s so the heavier notebooks have room.
+      - name: Execute notebooks
         run: |
           uv run python -m nbconvert \
             --to notebook \
@@ -60,16 +118,3 @@ jobs:
             --inplace \
             --ExecutePreprocessor.timeout=600 \
             notebooks/*.ipynb
-
-      # ---- coverage artifacts & summary ----------------------------------
-      - name: Upload Coverage Report
-        uses: actions/upload-artifact@v4
-        with:
-          name: coverage-report
-          path: htmlcov/
-
-      - name: Coverage Summary
-        if: always()
-        run: |
-          echo "## 📊 Coverage Report" >> $GITHUB_STEP_SUMMARY
-          uv run coverage report --format=markdown >> $GITHUB_STEP_SUMMARY

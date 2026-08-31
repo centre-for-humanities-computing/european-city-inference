@@ -14,24 +14,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Skeleton sub-packages `eci.data` (schemas, loaders, transformers) and
   `eci.fit` (priors, models, diagnostics) for the upcoming v0.2
   calibration pipeline.
-- `eci.voting_system.ResponseFunction` — a runtime-checkable
+- `eci.decision.ResponseFunction` — a runtime-checkable
   `typing.Protocol` formalising the extension contract for vote-sampling
   response functions. Anyone can now write a custom response function and
   plug it into `_vote_plurality` / `_vote_quadratic` without registration.
-- `eci.voting_system.scoring` — pluggable candidate-utility scoring with
+- `eci.decision.scoring` — pluggable candidate-utility scoring with
   four built-in strategies (`score_normalized`, `score_absolute`,
   `score_inverted`, and the new dissatisfaction-weighted `score_product`),
   injectable into `_compute_candidate_utilities` via the `scoring_fn`
   parameter. Replaces the previous block of commented-out alternative
   formulas with real, testable functions.
-- `eci.voting_system.VoteResult` — uniform `TypedDict` return type for
+- `eci.voting.VoteResult` — uniform `TypedDict` return type for
   all voting rules. Adds `votes_matrix` (n_agents, n_candidates) and
   `votes_per_candidate` (n_candidates,) keys to both plurality and QV
   results so downstream code (e.g. `batch_compute_metrics`) no longer
   needs to branch on which voting rule produced the result. Legacy keys
   (`votes`, `qv_votes_matrix`) are preserved for backward compatibility
   and will be removed in v0.2.
-- `eci.voting_system._sample_from_utilities` — DRY helper that holds the
+- `eci.decision._sample_from_utilities` — DRY helper that holds the
   common tail (mask + key split + sample + return tuple) of every
   response function. Each built-in response function is now a 2-3-line
   body.

@@ -1,11 +1,12 @@
-from typing import Optional, Protocol, Tuple, runtime_checkable
+from typing import Optional, Protocol, runtime_checkable
 
 import jax.numpy as jnp
 from jax.scipy.stats import norm
 from jax.typing import ArrayLike
 
 from eci.decision.sampling import _sample_from_utilities
-from eci.decision.scoring import score_normalized
+from eci.decision.scoring import ScoringFn, score_normalized
+from eci.decision.types import ElectionData, ResponseResult
 from eci.decision.utilities import (
     _compute_candidate_utilities,
     _get_belief_preference_gap,
@@ -48,16 +49,21 @@ class ResponseFunction(Protocol):
 
     def __call__(
         self,
-        data: dict,
+        data: ElectionData,
         key: ArrayLike,
         mask: Optional[ArrayLike] = None,
-    ) -> Tuple[ArrayLike, ArrayLike, ArrayLike, ArrayLike]:
+    ) -> ResponseResult:
         """Sample a vote per agent; see the class docstring for the contract."""
         ...
 
 
-# TODO: Maybe give full data parameter instead of dataframe
-def response_function(data, key, mask=None, *args, **kwargs):
+def response_function(
+    data: ElectionData,
+    key: ArrayLike,
+    mask: Optional[ArrayLike] = None,
+    *args,
+    **kwargs,
+) -> ResponseResult:
     """Sample one vote per agent using normalised KL-based utilities.
 
     Parameters
@@ -80,8 +86,13 @@ def response_function(data, key, mask=None, *args, **kwargs):
     return _sample_from_utilities(utilities, key, mask)
 
 
-# TODO: Maybe give full data parameter instead of dataframe
-def response_function_random(data, key, mask=None, *args, **kwargs):
+def response_function_random(
+    data: ElectionData,
+    key: ArrayLike,
+    mask: Optional[ArrayLike] = None,
+    *args,
+    **kwargs,
+) -> ResponseResult:
     """Sample one vote uniformly at random from the candidate list.
 
     Parameters
@@ -106,8 +117,13 @@ def response_function_random(data, key, mask=None, *args, **kwargs):
     return _sample_from_utilities(utilities, key, mask)
 
 
-# TODO: Maybe give full data parameter instead of dataframe
-def response_function_logpdf(data, key, mask=None, *args, **kwargs):
+def response_function_logpdf(
+    data: ElectionData,
+    key: ArrayLike,
+    mask: Optional[ArrayLike] = None,
+    *args,
+    **kwargs,
+) -> ResponseResult:
     """Sample one vote per agent using Gaussian log-pdf under preferences.
 
     Parameters
@@ -126,22 +142,27 @@ def response_function_logpdf(data, key, mask=None, *args, **kwargs):
     vote, softmax_probs, candidate_utilities, next_key
         See :class:`ResponseFunction` for the full shape contract.
     """
-    pref_mean = data["preferences"]["mean"]
-    pref_precision = data["preferences"]["precision"]
-    cand_mean = data["candidates"]["mean"]
-    pref_scale = 1.0 / jnp.sqrt(pref_precision)
+    preference_means = data["preferences"]["mean"]
+    preference_precisions = data["preferences"]["precision"]
+    candidate_means = data["candidates"]["mean"]
+    preference_scales = 1.0 / jnp.sqrt(preference_precisions)
 
-    logpdf_per_dim = norm.logpdf(
-        cand_mean[None, :, :],
-        loc=pref_mean[:, None, :],
-        scale=pref_scale[:, None, :],
+    log_probability_per_dimension = norm.logpdf(
+        candidate_means[None, :, :],
+        loc=preference_means[:, None, :],
+        scale=preference_scales[:, None, :],
     )
-    utilities = jnp.sum(logpdf_per_dim, axis=-1)
+    utilities = jnp.sum(log_probability_per_dimension, axis=-1)
     return _sample_from_utilities(utilities, key, mask)
 
 
-# TODO: Maybe give full data parameter instead of dataframe
-def response_function_pref(data, key, mask=None, *args, **kwargs):
+def response_function_pref(
+    data: ElectionData,
+    key: ArrayLike,
+    mask: Optional[ArrayLike] = None,
+    *args,
+    **kwargs,
+) -> ResponseResult:
     """Sample one vote per agent using negative KL(pref || candidate).
 
     Parameters
@@ -161,19 +182,24 @@ def response_function_pref(data, key, mask=None, *args, **kwargs):
     vote, softmax_probs, candidate_utilities, next_key
         See :class:`ResponseFunction` for the full shape contract.
     """
-    pref_candidate_gap = _get_pref_candidate_gap(
+    preference_candidate_gap = _get_pref_candidate_gap(
         data["candidates"]["mean"],
         data["candidates"]["precision"],
         data["preferences"]["mean"],
         data["preferences"]["precision"],
     )
 
-    utilities = -pref_candidate_gap
+    utilities = -preference_candidate_gap
     return _sample_from_utilities(utilities, key, mask)
 
 
-# TODO: Maybe give full data parameter instead of dataframe
-def response_function_cross_entropy(data, key, mask=None, *args, **kwargs):
+def response_function_cross_entropy(
+    data: ElectionData,
+    key: ArrayLike,
+    mask: Optional[ArrayLike] = None,
+    *args,
+    **kwargs,
+) -> ResponseResult:
     """Sample one vote per agent using negative cross-entropy H(candidate, pref).
 
     The cross-entropy counterpart of :func:`response_function_pref`: it scores
@@ -209,8 +235,13 @@ def response_function_cross_entropy(data, key, mask=None, *args, **kwargs):
     return _sample_from_utilities(utilities, key, mask)
 
 
-# TODO: Maybe give full data parameter instead of dataframe
-def response_function_precision(data, key, mask=None, *args, **kwargs):
+def response_function_precision(
+    data: ElectionData,
+    key: ArrayLike,
+    mask: Optional[ArrayLike] = None,
+    *args,
+    **kwargs,
+) -> ResponseResult:
     r"""Sample one vote per agent with a **precision-weighted softmax**.
 
     Parameters
@@ -230,27 +261,27 @@ def response_function_precision(data, key, mask=None, *args, **kwargs):
     vote, softmax_probs, candidate_utilities, next_key
         See :class:`ResponseFunction` for the full shape contract.
     """
-    tau = jnp.sum(data["beliefs"]["precision"], axis=-1, keepdims=True)
-    gap = _get_pref_candidate_gap(
-        data["preferences"]["mean"],
-        data["preferences"]["precision"],
+    belief_precision_weight = jnp.sum(
+        data["beliefs"]["precision"], axis=-1, keepdims=True
+    )
+    preference_candidate_gap = _get_pref_candidate_gap(
         data["candidates"]["mean"],
         data["candidates"]["precision"],
+        data["preferences"]["mean"],
+        data["preferences"]["precision"],
     )
-    utilities = -tau * gap
+    utilities = -belief_precision_weight * preference_candidate_gap
     return _sample_from_utilities(utilities, key, mask)
 
 
-# TODO: Maybe give full data parameter instead of dataframe
-# TODO: Split the function
 def response_function_bayesian(
-    data: dict,
+    data: ElectionData,
     key: ArrayLike,
     mask: Optional[ArrayLike] = None,
     *args,
-    scoring_fn=score_normalized,
+    scoring_fn: ScoringFn = score_normalized,
     **kwargs,
-) -> Tuple[ArrayLike, ArrayLike, ArrayLike, ArrayLike]:
+) -> ResponseResult:
     """Sample one vote per agent using Bayesian fusion of beliefs and candidates.
 
     Unlike standard response functions that compare preferences directly to
@@ -278,7 +309,6 @@ def response_function_bayesian(
     vote, softmax_probs, candidate_utilities, next_key
         See :class:`ResponseFunction` for the full shape contract.
     """
-    # compute utilities
     current_gap = _get_belief_preference_gap(
         data["beliefs"]["mean"],
         data["beliefs"]["precision"],
@@ -286,7 +316,6 @@ def response_function_bayesian(
         data["preferences"]["precision"],
     )
 
-    # compute expected future gap after Bayesian fusion of beliefs and candidates
     future_gap = _get_expected_future_belief_gap(
         data["beliefs"]["mean"],
         data["beliefs"]["precision"],
@@ -296,10 +325,8 @@ def response_function_bayesian(
         data["candidates"]["precision"],
     )
 
-    # compute utilities via the provided scoring function
     utilities = scoring_fn(current_gap, future_gap)
 
-    # sample votes from utilities
     return _sample_from_utilities(utilities, key, mask)
 
 

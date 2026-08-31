@@ -18,16 +18,10 @@ Lines like this one are HTML comments and won't appear in the rendered PR.
 <!-- e.g. "Closes #42", "Refs #17" -->
 
 
-## How was this tested?
-<!-- Which tests cover the change? Anything you ran manually? -->
-
-- [ ] `make tests` passes locally
-- [ ] `make lint` passes locally
-- [ ] `uv run mypy src/` passes locally
-- [ ] New tests added for new behaviour (or N/A explained below)
-- [ ] Notebooks still execute end-to-end (if touched)
-
 ## Checklist
+<!-- Tests, lint, type-check and notebooks are checked by CI — no need to
+report them here. -->
+- [ ] New tests added for new behaviour (or N/A explained below)
 - [ ] PR title is descriptive and follows the project's tone
 - [ ] `CHANGELOG.md` updated under `## Unreleased`
 - [ ] Public API additions documented (NumPy-style docstrings)

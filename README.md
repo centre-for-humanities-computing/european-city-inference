@@ -8,27 +8,12 @@
 
 **Agent-based political election simulator using Hierarchical Gaussian Filter (HGF) and JAX.**
 
-ECI models thousands of voters as **predictive-coding agents** — each one
+ECI models voters as **predictive-coding agents** — each one
 runs a Hierarchical Gaussian Filter over a stream of noisy world
 observations, then casts a vote whose decisiveness is shaped by their
 posterior precision. The package compares how different voting rules
 (plurality, quadratic voting, …) aggregate those precision-weighted
 ballots into a collective outcome.
-
----
-
-## Why should you care?
-
-ECI turns verbal hypotheses about voter behaviour into formal models. Three things it lets you do:
-
-- **Sweep parameters at scale.** Vary belief precision, world
-  volatility, electorate size, and watch how the winning candidate
-  shifts under each voting rule.
-- **Compare voting rules on the same population.** Same voters, same
-  beliefs — only the aggregation changes. Disagreements between rules
-  become directly attributable to the rule, not to the data.
-- **Calibrate against real experiments** *(coming in v0.2)*. Fit ECI
-  parameters to ballots collected from real participants.
 
 ---
 
@@ -53,7 +38,7 @@ make jupyterlab
 
 ---
 
-## A 30-second example
+## How to use it?
 
 ```python
 import jax

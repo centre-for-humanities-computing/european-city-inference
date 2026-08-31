@@ -7,7 +7,7 @@ class VoteResult(TypedDict, total=False):
     """Uniform return type for voting rules.
 
     The fields under "Always present" are guaranteed by every voting
-    function in :mod:`eci.voting_system`. Extra fields appear only for
+    function in :mod:`eci.voting`. Extra fields appear only for
     specific rules (e.g. ``credits_spent`` for quadratic).
 
     Always present
